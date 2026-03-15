@@ -32,7 +32,6 @@ def analyze_damage():
 
     if has_file:
         engine_type = "用户提供: 无人机高分影像"
-        # 无人机上传的图，时间标记为实时
         image_date = "用户实时上传 (无人机本地数据)"
         file = request.files['file']
         
@@ -43,12 +42,17 @@ def analyze_damage():
                     reprojected_poly = transform_geom('EPSG:4326', tiff_crs, geojson_poly)
                     out_image, out_transform = mask(dataset, [reprojected_poly], crop=True)
                     
+                    # 尝试读取4个波段 (蓝, 绿, 红, 近红外)
                     if dataset.count >= 4:
-                        red, nir = out_image[2].astype(float), out_image[3].astype(float)
+                        b, g, r, nir = out_image[0], out_image[1], out_image[2], out_image[3]
+                    elif dataset.count == 3:
+                        b, g, r = out_image[0], out_image[1], out_image[2]
+                        nir = np.zeros_like(r) # 假定没有近红外
                     else:
-                        red, nir = out_image[0].astype(float), out_image[1].astype(float)
+                        r, nir = out_image[0], out_image[1]
+                        b, g = np.zeros_like(r), np.zeros_like(r)
                         
-                    return process_pixels(red, nir, out_image[0], area_mu, engine_type, image_date)
+                    return process_pixels(b.astype(float), g.astype(float), r.astype(float), nir.astype(float), out_image[0], area_mu, engine_type, image_date)
         except Exception as e:
             return jsonify({"error": f"无人机影像解析失败: {str(e)}"}), 500
 
@@ -65,39 +69,68 @@ def analyze_damage():
             items = list(search.items())
             
             if not items:
-                return jsonify({"error": "该区域近期无清晰的卫星影像，请手动上传无人机影像。"}), 404
+                return jsonify({"error": "该区域近期无清晰卫星影像，请上传无人机影像。"}), 404
                 
             item = items[0]
-            # 【重点修改】捕获真实卫星过境成像时间
             image_date = item.datetime.strftime("%Y-%m-%d %H:%M:%S UTC") if item.datetime else "实时获取"
             
-            red_url = item.assets["red"].href
-            nir_url = item.assets["nir"].href
+            # 【重点】真实拉取四个波段
+            urls = {
+                "blue": item.assets["blue"].href,
+                "green": item.assets["green"].href,
+                "red": item.assets["red"].href,
+                "nir": item.assets["nir"].href
+            }
             
-            with rasterio.open(red_url) as src_red:
-                reprojected_poly = transform_geom('EPSG:4326', src_red.crs, geojson_poly)
-                red_data, _ = mask(src_red, [reprojected_poly], crop=True)
+            bands_data = {}
+            for color, url in urls.items():
+                with rasterio.open(url) as src:
+                    reprojected_poly = transform_geom('EPSG:4326', src.crs, geojson_poly)
+                    data, _ = mask(src, [reprojected_poly], crop=True)
+                    bands_data[color] = data[0].astype(float)
                 
-            with rasterio.open(nir_url) as src_nir:
-                nir_data, _ = mask(src_nir, [reprojected_poly], crop=True)
-                
-            return process_pixels(red_data[0].astype(float), nir_data[0].astype(float), red_data[0], area_mu, engine_type, image_date)
+            return process_pixels(bands_data["blue"], bands_data["green"], bands_data["red"], bands_data["nir"], bands_data["red"], area_mu, engine_type, image_date)
             
         except Exception as e:
             return jsonify({"error": f"对接公开卫星数据源失败: {str(e)}"}), 500
 
-def process_pixels(red, nir, gray_band, area_mu, engine_type, image_date):
+def process_pixels(b, g, r, nir, gray_band, area_mu, engine_type, image_date):
     np.seterr(divide='ignore', invalid='ignore')
-    ndvi = (nir - red) / (nir + red)
+    ndvi = (nir - r) / (nir + r)
     
-    valid_mask = (red != 0) | (nir != 0)
+    valid_mask = (r != 0) | (nir != 0)
     valid_ndvi = ndvi[valid_mask]
     
     if len(valid_ndvi) == 0:
         return jsonify({"error": "计算失败：该图斑内无有效数据"}), 400
 
-    damage_ratio_float = float(np.sum(valid_ndvi < 0.35) / len(valid_ndvi))
+    healthy_mask = (ndvi >= 0.35) & valid_mask
+    damaged_mask = (ndvi < 0.35) & valid_mask
+
+    damage_ratio_float = float(np.sum(damaged_mask) / len(valid_ndvi))
     damaged_mu = area_mu * damage_ratio_float
+
+    # --- 计算真实的光谱曲线数据 ---
+    def get_mean_reflectance(band_array, mask_array):
+        if not np.any(mask_array): return 0.0
+        mean_val = np.mean(band_array[mask_array])
+        # 将底层数值映射为 0-100 的图表百分比 (Sentinel-2通常除以100)
+        scale = 255.0 if "无人机" in engine_type else 100.0
+        return min(100.0, float(mean_val / scale))
+
+    spectral_healthy = [
+        get_mean_reflectance(b, healthy_mask),
+        get_mean_reflectance(g, healthy_mask),
+        get_mean_reflectance(r, healthy_mask),
+        get_mean_reflectance(nir, healthy_mask)
+    ]
+    
+    spectral_damaged = [
+        get_mean_reflectance(b, damaged_mask),
+        get_mean_reflectance(g, damaged_mask),
+        get_mean_reflectance(r, damaged_mask),
+        get_mean_reflectance(nir, damaged_mask)
+    ]
 
     min_val, max_val = gray_band[valid_mask].min(), gray_band[valid_mask].max()
     gray_8bit = np.uint8(255 * (gray_band - min_val) / (max_val - min_val)) if max_val > min_val else np.zeros_like(gray_band, dtype=np.uint8)
@@ -106,7 +139,6 @@ def process_pixels(red, nir, gray_band, area_mu, engine_type, image_date):
     real_contrast = float(graycoprops(glcm, 'contrast')[0, 0])
     real_entropy = float(shannon_entropy(gray_8bit[valid_mask]))
 
-    # 【重点修改】逻辑拦截：如果受灾比例极低，直接判定为正常，不输出灾害成因
     if damage_ratio_float < 0.01:
         cause_analysis = "长势良好，未检测到明显灾害特征"
     else:
@@ -115,12 +147,13 @@ def process_pixels(red, nir, gray_band, area_mu, engine_type, image_date):
     return jsonify({
         "status": "success",
         "engine_type": engine_type,
-        "image_date": image_date,  # 返回成像时间
+        "image_date": image_date,
         "total_area_mu": round(area_mu, 2),
         "damaged_area_mu": round(damaged_mu, 2),
         "damage_ratio_float": damage_ratio_float,
         "damage_ratio": f"{round(damage_ratio_float * 100, 1)}%",
-        "glcm_metrics": {"contrast": round(real_contrast, 2), "entropy": round(real_entropy, 2), "cause_analysis": cause_analysis}
+        "glcm_metrics": {"contrast": round(real_contrast, 2), "entropy": round(real_entropy, 2), "cause_analysis": cause_analysis},
+        "spectral_data": {"healthy": spectral_healthy, "damaged": spectral_damaged}
     })
 
 if __name__ == '__main__':
