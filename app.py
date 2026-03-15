@@ -42,12 +42,11 @@ def analyze_damage():
                     reprojected_poly = transform_geom('EPSG:4326', tiff_crs, geojson_poly)
                     out_image, out_transform = mask(dataset, [reprojected_poly], crop=True)
                     
-                    # 尝试读取4个波段 (蓝, 绿, 红, 近红外)
                     if dataset.count >= 4:
                         b, g, r, nir = out_image[0], out_image[1], out_image[2], out_image[3]
                     elif dataset.count == 3:
                         b, g, r = out_image[0], out_image[1], out_image[2]
-                        nir = np.zeros_like(r) # 假定没有近红外
+                        nir = np.zeros_like(r) 
                     else:
                         r, nir = out_image[0], out_image[1]
                         b, g = np.zeros_like(r), np.zeros_like(r)
@@ -74,7 +73,6 @@ def analyze_damage():
             item = items[0]
             image_date = item.datetime.strftime("%Y-%m-%d %H:%M:%S UTC") if item.datetime else "实时获取"
             
-            # 【重点】真实拉取四个波段
             urls = {
                 "blue": item.assets["blue"].href,
                 "green": item.assets["green"].href,
@@ -110,26 +108,19 @@ def process_pixels(b, g, r, nir, gray_band, area_mu, engine_type, image_date):
     damage_ratio_float = float(np.sum(damaged_mask) / len(valid_ndvi))
     damaged_mu = area_mu * damage_ratio_float
 
-    # --- 计算真实的光谱曲线数据 ---
     def get_mean_reflectance(band_array, mask_array):
         if not np.any(mask_array): return 0.0
         mean_val = np.mean(band_array[mask_array])
-        # 将底层数值映射为 0-100 的图表百分比 (Sentinel-2通常除以100)
         scale = 255.0 if "无人机" in engine_type else 100.0
         return min(100.0, float(mean_val / scale))
 
     spectral_healthy = [
-        get_mean_reflectance(b, healthy_mask),
-        get_mean_reflectance(g, healthy_mask),
-        get_mean_reflectance(r, healthy_mask),
-        get_mean_reflectance(nir, healthy_mask)
+        get_mean_reflectance(b, healthy_mask), get_mean_reflectance(g, healthy_mask),
+        get_mean_reflectance(r, healthy_mask), get_mean_reflectance(nir, healthy_mask)
     ]
-    
     spectral_damaged = [
-        get_mean_reflectance(b, damaged_mask),
-        get_mean_reflectance(g, damaged_mask),
-        get_mean_reflectance(r, damaged_mask),
-        get_mean_reflectance(nir, damaged_mask)
+        get_mean_reflectance(b, damaged_mask), get_mean_reflectance(g, damaged_mask),
+        get_mean_reflectance(r, damaged_mask), get_mean_reflectance(nir, damaged_mask)
     ]
 
     min_val, max_val = gray_band[valid_mask].min(), gray_band[valid_mask].max()
@@ -139,10 +130,19 @@ def process_pixels(b, g, r, nir, gray_band, area_mu, engine_type, image_date):
     real_contrast = float(graycoprops(glcm, 'contrast')[0, 0])
     real_entropy = float(shannon_entropy(gray_8bit[valid_mask]))
 
+    # === 🚀 全新智能诊断逻辑 ===
     if damage_ratio_float < 0.01:
+        cause_type = "healthy"
         cause_analysis = "长势良好，未检测到明显灾害特征"
+    elif real_contrast > 400.0: # 如果对比度破天荒地高，说明框到了房子马路
+        cause_type = "non_agri"
+        cause_analysis = "非农地物干扰 (识别到建筑/道路/裸土，请框选纯净农田)"
+    elif real_contrast > 80.0 or real_entropy > 6.5:
+        cause_type = "disaster"
+        cause_analysis = "自然灾害 (高频纹理/作物定向倒伏)"
     else:
-        cause_analysis = "自然灾害 (高频纹理/定向倒伏)" if real_contrast > 80.0 or real_entropy > 6.5 else "疑似管理不善 (平滑低熵/缺水病害)"
+        cause_type = "management"
+        cause_analysis = "疑似管理不善 (平滑低熵/缺水病害)"
 
     return jsonify({
         "status": "success",
@@ -152,7 +152,12 @@ def process_pixels(b, g, r, nir, gray_band, area_mu, engine_type, image_date):
         "damaged_area_mu": round(damaged_mu, 2),
         "damage_ratio_float": damage_ratio_float,
         "damage_ratio": f"{round(damage_ratio_float * 100, 1)}%",
-        "glcm_metrics": {"contrast": round(real_contrast, 2), "entropy": round(real_entropy, 2), "cause_analysis": cause_analysis},
+        "glcm_metrics": {
+            "contrast": round(real_contrast, 2), 
+            "entropy": round(real_entropy, 2), 
+            "cause_analysis": cause_analysis,
+            "cause_type": cause_type  # 把病因类型传给前端
+        },
         "spectral_data": {"healthy": spectral_healthy, "damaged": spectral_damaged}
     })
 
