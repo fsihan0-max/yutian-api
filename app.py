@@ -14,7 +14,6 @@ from skimage.measure import shannon_entropy
 app = Flask(__name__)
 CORS(app)
 
-# 对接 AWS 上的免费公共 STAC 卫星目录 (包含 Sentinel-2 真实多光谱数据)
 STAC_API_URL = "https://earth-search.aws.element84.com/v1"
 
 @app.route('/api/analyze', methods=['POST'])
@@ -22,9 +21,6 @@ def analyze_damage():
     is_multipart = request.content_type and 'multipart/form-data' in request.content_type
     has_file = is_multipart and 'file' in request.files
 
-    print("="*60)
-    
-    # 获取前端传来的经纬度坐标多边形
     geom_data = request.form.get('geometry') if is_multipart else request.get_json().get('geometry')
     area_mu = float(request.form.get('area_mu', 0)) if is_multipart else float(request.get_json().get('area_mu', 0))
     
@@ -34,12 +30,10 @@ def analyze_damage():
     geom_json = json.loads(geom_data) if isinstance(geom_data, str) else geom_data
     geojson_poly = {"type": "Polygon", "coordinates": geom_json.get('rings', [])}
 
-    # ==========================================
-    # 模式 A：用户上传了无人机高分影像 (微观模式)
-    # ==========================================
     if has_file:
-        print("【引擎 A：无人机 DOM 模式】收到前端上传的高分影像...")
         engine_type = "用户提供: 无人机高分影像"
+        # 无人机上传的图，时间标记为实时
+        image_date = "用户实时上传 (无人机本地数据)"
         file = request.files['file']
         
         try:
@@ -54,24 +48,18 @@ def analyze_damage():
                     else:
                         red, nir = out_image[0].astype(float), out_image[1].astype(float)
                         
-                    return process_pixels(red, nir, out_image[0], area_mu, engine_type)
+                    return process_pixels(red, nir, out_image[0], area_mu, engine_type, image_date)
         except Exception as e:
             return jsonify({"error": f"无人机影像解析失败: {str(e)}"}), 500
 
-    # ==========================================
-    # 模式 B：未上传文件，自动对接云端真实卫星 (宏观模式)
-    # ==========================================
     else:
-        print("【引擎 B：云端真实卫星模式】正在对接 AWS Sentinel-2 卫星接口...")
         engine_type = "云端直连: Sentinel-2 真实多光谱"
-        
         try:
-            # 1. 搜索该坐标区域最近的、云量少于 20% 的卫星影像
             catalog = Client.open(STAC_API_URL)
             search = catalog.search(
                 collections=["sentinel-2-l2a"],
                 intersects=geojson_poly,
-                query={"eo:cloud_cover": {"lt": 20}}, # 云量小于 20%
+                query={"eo:cloud_cover": {"lt": 20}},
                 max_items=1
             )
             items = list(search.items())
@@ -80,14 +68,12 @@ def analyze_damage():
                 return jsonify({"error": "该区域近期无清晰的卫星影像，请手动上传无人机影像。"}), 404
                 
             item = items[0]
-            print(f"✅ 成功锁定卫星影像！拍摄时间: {item.datetime}")
+            # 【重点修改】捕获真实卫星过境成像时间
+            image_date = item.datetime.strftime("%Y-%m-%d %H:%M:%S UTC") if item.datetime else "实时获取"
             
-            # 2. 获取真实的红光和近红外波段在云端的下载链接 (COG格式)
             red_url = item.assets["red"].href
             nir_url = item.assets["nir"].href
             
-            # 3. 核心黑科技：不下载整张图，只在内存中读取多边形内的像素！
-            print("正在流式拉取红光与近红外底层像素...")
             with rasterio.open(red_url) as src_red:
                 reprojected_poly = transform_geom('EPSG:4326', src_red.crs, geojson_poly)
                 red_data, _ = mask(src_red, [reprojected_poly], crop=True)
@@ -95,18 +81,12 @@ def analyze_damage():
             with rasterio.open(nir_url) as src_nir:
                 nir_data, _ = mask(src_nir, [reprojected_poly], crop=True)
                 
-            # 拿到像素后，直接送入处理函数
-            return process_pixels(red_data[0].astype(float), nir_data[0].astype(float), red_data[0], area_mu, engine_type)
+            return process_pixels(red_data[0].astype(float), nir_data[0].astype(float), red_data[0], area_mu, engine_type, image_date)
             
         except Exception as e:
-            import traceback
-            traceback.print_exc()
             return jsonify({"error": f"对接公开卫星数据源失败: {str(e)}"}), 500
 
-# ==========================================
-# 核心算力池：真实 NDVI 与 GLCM 计算逻辑
-# ==========================================
-def process_pixels(red, nir, gray_band, area_mu, engine_type):
+def process_pixels(red, nir, gray_band, area_mu, engine_type, image_date):
     np.seterr(divide='ignore', invalid='ignore')
     ndvi = (nir - red) / (nir + red)
     
@@ -126,11 +106,16 @@ def process_pixels(red, nir, gray_band, area_mu, engine_type):
     real_contrast = float(graycoprops(glcm, 'contrast')[0, 0])
     real_entropy = float(shannon_entropy(gray_8bit[valid_mask]))
 
-    cause_analysis = "自然灾害 (高频纹理/定向倒伏)" if real_contrast > 80.0 or real_entropy > 6.5 else "疑似管理不善 (平滑低熵/缺水病害)"
+    # 【重点修改】逻辑拦截：如果受灾比例极低，直接判定为正常，不输出灾害成因
+    if damage_ratio_float < 0.01:
+        cause_analysis = "长势良好，未检测到明显灾害特征"
+    else:
+        cause_analysis = "自然灾害 (高频纹理/定向倒伏)" if real_contrast > 80.0 or real_entropy > 6.5 else "疑似管理不善 (平滑低熵/缺水病害)"
 
     return jsonify({
         "status": "success",
         "engine_type": engine_type,
+        "image_date": image_date,  # 返回成像时间
         "total_area_mu": round(area_mu, 2),
         "damaged_area_mu": round(damaged_mu, 2),
         "damage_ratio_float": damage_ratio_float,
@@ -139,5 +124,4 @@ def process_pixels(red, nir, gray_band, area_mu, engine_type):
     })
 
 if __name__ == '__main__':
-    print("🚀 豫田智保 (真实卫星对接+无人机双模版) 启动！")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000)
