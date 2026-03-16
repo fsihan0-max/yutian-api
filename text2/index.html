@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>豫田智保平台 - 农险查勘、案件管理与风险监管</title>
+    <title>豫田智保平台 - 三端协同农险查勘与风控</title>
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
@@ -11,312 +11,486 @@
     <script src="https://js.arcgis.com/4.28/"></script>
 </head>
 <body>
-    <div class="platform-shell">
-        <aside class="platform-sidebar">
-            <div class="brand-block">
-                <div class="brand-badge">YTZB</div>
+    <div class="shell">
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-mark">YT</div>
                 <div>
                     <h1>豫田智保平台</h1>
-                    <p>农险查勘定损与风险监管一体化 SaaS</p>
+                    <p>查勘定损、案件复核、监管决策三端协同</p>
                 </div>
             </div>
 
-            <nav class="module-nav">
-                <button class="module-link active" data-module="survey">智能查勘定损</button>
-                <button class="module-link" data-module="cases">案件管理</button>
-                <button class="module-link" data-module="reports">智能报告与证据输出</button>
-                <button class="module-link" data-module="dashboard">风险监管大屏</button>
-            </nav>
-
-            <section class="sidebar-panel">
-                <h2>平台能力</h2>
-                <ul class="tag-list">
-                    <li>多边形框选地块</li>
-                    <li>无人机 GeoTIFF 上传</li>
-                    <li>Sentinel-2 STAC 调用</li>
-                    <li>NDVI + GLCM 联合识别</li>
-                    <li>案件状态流转</li>
-                    <li>报告输出</li>
-                    <li>风险监管与风控提醒</li>
-                </ul>
+            <section class="sidebar-card">
+                <p class="eyebrow">登录后首页</p>
+                <h2>角色入口</h2>
+                <div class="entry-list">
+                    <button class="entry-card active" data-entry="survey">
+                        <strong>进入查勘定损端</strong>
+                        <span>查勘员 / 理赔员工作入口</span>
+                    </button>
+                    <button class="entry-card" data-entry="review">
+                        <strong>进入案件复核</strong>
+                        <span>保险公司审核 / 归档入口</span>
+                    </button>
+                    <button class="entry-card" data-entry="governance">
+                        <strong>进入监管决策端</strong>
+                        <span>管理者态势感知与调度入口</span>
+                    </button>
+                </div>
             </section>
 
-            <section class="sidebar-panel">
-                <h2>今日快照</h2>
-                <div class="mini-stat-list" id="miniStatList"></div>
+            <section class="sidebar-card">
+                <p class="eyebrow">今日快照</p>
+                <div class="mini-list" id="miniStatList"></div>
+            </section>
+
+            <section class="sidebar-card">
+                <p class="eyebrow">算法增强</p>
+                <div class="tag-cloud">
+                    <span>作物模式切换</span>
+                    <span>规则 / 机器学习双判定</span>
+                    <span>NDVI / NDRE / EVI2 / NDMI / BSI</span>
+                    <span>非灾害状态识别</span>
+                    <span>样本闭环</span>
+                    <span>人工复核回写</span>
+                </div>
             </section>
         </aside>
 
-        <main class="platform-main">
-            <header class="topbar">
+        <main class="main">
+            <header class="hero">
                 <div>
-                    <p class="eyebrow">农业保险精细化查勘平台</p>
-                    <h2 id="moduleTitle">智能查勘定损核心模块</h2>
+                    <p class="eyebrow">Agriculture Insurance Survey Platform</p>
+                    <h2 id="entryTitle">查勘定损端</h2>
+                    <p id="entryDesc">面向查勘员与理赔员，聚焦地块圈选、多源影像接入、灾害判定、样本标注与外业取证。</p>
                 </div>
-                <div class="topbar-meta">
-                    <span>运行状态：在线</span>
-                    <span>数据模式：演示环境</span>
+                <div class="hero-status">
+                    <span id="apiHealthBadge">后端状态：待检测</span>
+                    <span>地图引擎：ArcGIS JS 4.28</span>
                 </div>
             </header>
 
-            <section class="hero-strip">
-                <article class="hero-card hero-primary">
-                    <p class="hero-label">核心定位</p>
-                    <h3>以真实遥感分析为核心，向案件、报告、监管延展</h3>
-                    <p>保留查勘定损主链路，同时增加平台化运营能力，让系统从算法演示升级为可管理、可归档、可监管的农险平台。</p>
-                </article>
-                <article class="hero-card">
-                    <p class="hero-label">加分功能</p>
-                    <h3>历史案件对比 + 防欺诈辅助判别</h3>
-                    <p>同地块历史记录、重复报案提醒、影像时间核验、非农地物识别共同构成风控辅助层。</p>
-                </article>
-            </section>
+            <section class="entry-panel active" data-entry-panel="survey">
+                <div class="subnav">
+                    <button class="subnav-link active" data-subnav="survey-workspace">智能定损工作台</button>
+                    <button class="subnav-link" data-subnav="survey-samples">样本标注与模型辅助</button>
+                    <button class="subnav-link" data-subnav="survey-history">历史对比</button>
+                    <button class="subnav-link" data-subnav="survey-evidence">外业取证</button>
+                </div>
 
-            <section class="module-section active" data-module-panel="survey">
-                <div class="content-grid survey-grid">
-                    <div class="card control-card">
-                        <div class="card-header">
-                            <div>
-                                <p class="card-kicker">模块 1</p>
-                                <h3>智能查勘定损核心模块</h3>
-                            </div>
-                            <span class="status-pill online">核心运行中</span>
-                        </div>
-
-                        <div class="inline-controls">
-                            <div class="search-bar-inline">
-                                <input type="text" id="searchInput" placeholder="输入村镇、地址或地块定位...">
-                                <button id="btnSearch">定位</button>
-                            </div>
-                            <div class="toggle-row">
-                                <button id="btn-vector" class="btn active">矢量底图</button>
-                                <button id="btn-satellite" class="btn">影像底图</button>
-                            </div>
-                        </div>
-
-                        <div class="tool-group">
-                            <h4>采集与分析链路</h4>
-                            <p class="muted">支持无人机 GeoTIFF 上传与 Sentinel-2 在线获取双通道分析。</p>
-                            <input type="file" id="drone-upload-input" accept=".tif,.tiff" hidden>
-                            <button id="btn-upload-drone" class="btn btn-accent">上传无人机正射影像 (GeoTIFF)</button>
-                            <button id="btn-analyze" class="btn btn-primary" disabled>提交智能定损分析</button>
-                        </div>
-
-                        <div class="tool-group">
-                            <h4>当前能力清单</h4>
-                            <div class="feature-grid">
-                                <span class="feature-chip">多边形框选</span>
-                                <span class="feature-chip">STAC 拉取</span>
-                                <span class="feature-chip">NDVI 识别</span>
-                                <span class="feature-chip">GLCM 纹理分析</span>
-                                <span class="feature-chip">受灾面积统计</span>
-                                <span class="feature-chip">成因判别</span>
-                            </div>
-                        </div>
-
-                        <div id="report-panel" class="report-panel" hidden>
-                            <div class="card-header compact">
+                <section class="subpage active" data-subpage="survey-workspace">
+                    <div class="grid two-thirds">
+                        <div class="card">
+                            <div class="card-head">
                                 <div>
-                                    <p class="card-kicker">分析结果</p>
-                                    <h4>智能定损分析报告</h4>
+                                    <p class="eyebrow">智能定损工作台</p>
+                                    <h3>地块圈选与分析</h3>
+                                </div>
+                                <span class="badge success">核心主页面</span>
+                            </div>
+
+                            <div class="controls-grid">
+                                <div class="search-row">
+                                    <input type="text" id="searchInput" placeholder="输入村镇、地址或地块位置...">
+                                    <button class="btn" id="btnSearch">定位</button>
+                                </div>
+                                <div class="control-row">
+                                    <select id="cropModeSelect">
+                                        <option value="wheat">小麦定损模式</option>
+                                        <option value="corn">玉米定损模式</option>
+                                    </select>
+                                    <div class="segmented" id="modelModeGroup">
+                                        <button class="segmented-btn active" data-model-mode="rule">规则判定</button>
+                                        <button class="segmented-btn" data-model-mode="ml">机器学习判定</button>
+                                    </div>
+                                </div>
+                                <div class="control-row">
+                                    <div class="segmented">
+                                        <button class="segmented-btn active" id="btn-vector">矢量底图</button>
+                                        <button class="segmented-btn" id="btn-satellite">影像底图</button>
+                                    </div>
+                                    <div class="segmented theme-tabs" id="themeTabGroup">
+                                        <button class="segmented-btn active" data-theme-key="ndvi">NDVI</button>
+                                        <button class="segmented-btn" data-theme-key="ndre">NDRE</button>
+                                        <button class="segmented-btn" data-theme-key="evi2">EVI2</button>
+                                        <button class="segmented-btn" data-theme-key="ndmi">NDMI</button>
+                                        <button class="segmented-btn" data-theme-key="bsi">BSI</button>
+                                    </div>
+                                </div>
+                                <div class="action-row">
+                                    <input type="file" id="drone-upload-input" accept=".tif,.tiff" hidden>
+                                    <button class="btn btn-accent" id="btn-upload-drone">上传无人机正射影像</button>
+                                    <button class="btn btn-primary" id="btn-analyze" disabled>提交智能定损分析</button>
+                                    <button class="btn" id="saveSampleQuickBtn">按当前结果存为样本</button>
                                 </div>
                             </div>
-                            <div class="report-content" id="report-content"></div>
-                            <div class="chart-container">
-                                <canvas id="spectralChart"></canvas>
-                            </div>
-                            <div class="report-explanation" id="report-explanation"></div>
-                        </div>
-                    </div>
 
-                    <div class="card map-card">
-                        <div class="card-header compact">
-                            <div>
-                                <p class="card-kicker">地图工作台</p>
-                                <h3>地块圈选与结果叠加</h3>
+                            <div class="stats-grid" id="analysisSummaryCards"></div>
+
+                            <div class="result-panel" id="analysisReportPanel" hidden>
+                                <div class="card-head compact">
+                                    <div>
+                                        <p class="eyebrow">结果解释卡</p>
+                                        <h4>为什么判成灾害 / 收割 / 休耕</h4>
+                                    </div>
+                                </div>
+                                <div class="compare-grid">
+                                    <div class="mini-panel">
+                                        <h5>规则判定结果卡</h5>
+                                        <div id="ruleResultCard"></div>
+                                    </div>
+                                    <div class="mini-panel">
+                                        <h5>机器学习判定结果卡</h5>
+                                        <div id="mlResultCard"></div>
+                                    </div>
+                                </div>
+                                <div class="explain-card" id="finalExplainCard"></div>
+                                <div class="thematic-grid" id="thematicCardGrid"></div>
+                                <div class="chart-card">
+                                    <canvas id="spectralChart"></canvas>
+                                </div>
                             </div>
                         </div>
-                        <div id="viewDiv"></div>
+
+                        <div class="card map-card">
+                            <div class="card-head compact">
+                                <div>
+                                    <p class="eyebrow">地图工作区</p>
+                                    <h3>多源影像接入与灾害识别结果展示</h3>
+                                </div>
+                            </div>
+                            <div id="viewDiv"></div>
+                        </div>
                     </div>
-                </div>
+                </section>
+
+                <section class="subpage" data-subpage="survey-samples">
+                    <div class="grid two-col">
+                        <div class="card">
+                            <div class="card-head">
+                                <div>
+                                    <p class="eyebrow">样本标注与模型辅助页</p>
+                                    <h3>训练样本管理</h3>
+                                </div>
+                                <span class="badge warning">样本闭环</span>
+                            </div>
+
+                            <div class="form-grid">
+                                <select id="sampleLabelSelect">
+                                    <option value="pest">病虫害</option>
+                                    <option value="lodging">倒伏</option>
+                                    <option value="harvest">正常收割</option>
+                                    <option value="fallow">休耕</option>
+                                    <option value="healthy">正常长势</option>
+                                    <option value="non_agri">非农地物</option>
+                                </select>
+                                <input id="sampleNotesInput" type="text" placeholder="样本说明，例如：条带状倒伏区">
+                                <button class="btn btn-primary" id="saveSampleBtn">保存当前分析为训练样本</button>
+                            </div>
+
+                            <div class="feature-list" id="currentFeatureList"></div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-head compact">
+                                <div>
+                                    <p class="eyebrow">样本库</p>
+                                    <h3>样本采集与标注记录</h3>
+                                </div>
+                            </div>
+                            <div class="sample-list" id="sampleList"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="subpage" data-subpage="survey-history">
+                    <div class="grid two-col">
+                        <div class="card">
+                            <div class="card-head">
+                                <div>
+                                    <p class="eyebrow">历史对比页</p>
+                                    <h3>本次 vs 历史查勘对比</h3>
+                                </div>
+                            </div>
+                            <div class="compare-list" id="historyCompareList"></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-head compact">
+                                <div>
+                                    <p class="eyebrow">重复报案核查</p>
+                                    <h3>同期长势与案件轨迹</h3>
+                                </div>
+                            </div>
+                            <div class="history-metrics" id="historyMetrics"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="subpage" data-subpage="survey-evidence">
+                    <div class="grid two-col">
+                        <div class="card">
+                            <div class="card-head">
+                                <div>
+                                    <p class="eyebrow">外业取证页</p>
+                                    <h3>影像与证据归集</h3>
+                                </div>
+                            </div>
+                            <div class="form-grid">
+                                <input type="file" id="evidenceUploadInput" multiple accept="image/*">
+                                <input type="text" id="evidenceRemarkInput" placeholder="证据备注，例如：东侧田埂倒伏照片">
+                                <button class="btn" id="addEvidenceBtn">加入证据清单</button>
+                            </div>
+                            <div class="evidence-list" id="fieldEvidenceList"></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-head compact">
+                                <div>
+                                    <p class="eyebrow">查勘轨迹记录</p>
+                                    <h3>外业取证任务</h3>
+                                </div>
+                            </div>
+                            <div class="task-list" id="fieldTaskList"></div>
+                        </div>
+                    </div>
+                </section>
             </section>
 
-            <section class="module-section" data-module-panel="cases">
-                <div class="content-grid two-col">
-                    <div class="card">
-                        <div class="card-header">
-                            <div>
-                                <p class="card-kicker">模块 2</p>
-                                <h3>案件管理模块</h3>
-                            </div>
-                            <span class="status-pill review">平台化能力</span>
-                        </div>
+            <section class="entry-panel" data-entry-panel="review">
+                <div class="subnav">
+                    <button class="subnav-link active" data-subnav="review-overview">案件总览</button>
+                    <button class="subnav-link" data-subnav="review-decision">结果复核</button>
+                    <button class="subnav-link" data-subnav="review-report">报告出证</button>
+                    <button class="subnav-link" data-subnav="review-dispute">争议案件</button>
+                </div>
 
-                        <div class="filter-grid">
-                            <select id="filterTown"></select>
-                            <select id="filterVillage"></select>
-                            <select id="filterCrop"></select>
-                            <select id="filterStatus"></select>
-                        </div>
-
-                        <div class="table-wrap">
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>案件编号</th>
-                                        <th>乡镇 / 行政村</th>
-                                        <th>作物</th>
-                                        <th>状态</th>
-                                        <th>查勘员</th>
-                                        <th>受灾时间</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="caseTableBody"></tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div class="stack-col">
+                <section class="subpage active" data-subpage="review-overview">
+                    <div class="grid two-thirds">
                         <div class="card">
-                            <div class="card-header compact">
+                            <div class="card-head">
                                 <div>
-                                    <p class="card-kicker">案件详情</p>
+                                    <p class="eyebrow">案件总览页</p>
+                                    <h3>保险公司视角案件筛选</h3>
+                                </div>
+                            </div>
+                            <div class="filter-grid">
+                                <select id="filterTown"></select>
+                                <select id="filterCrop"></select>
+                                <select id="filterStatus"></select>
+                                <select id="filterRisk"></select>
+                                <select id="filterSource"></select>
+                            </div>
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>案件编号</th>
+                                            <th>乡镇 / 村</th>
+                                            <th>作物</th>
+                                            <th>灾害类型</th>
+                                            <th>置信度</th>
+                                            <th>影像来源</th>
+                                            <th>状态</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="caseTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-head compact">
+                                <div>
+                                    <p class="eyebrow">案件详情</p>
                                     <h3 id="caseDetailTitle">请选择案件</h3>
                                 </div>
                             </div>
-                            <div class="detail-grid" id="caseDetailGrid"></div>
-                        </div>
-
-                        <div class="card">
-                            <div class="card-header compact">
-                                <div>
-                                    <p class="card-kicker">状态流转</p>
-                                    <h3>案件进度</h3>
-                                </div>
-                            </div>
+                            <div class="detail-list" id="caseDetailList"></div>
                             <div class="status-flow" id="statusFlow"></div>
                         </div>
                     </div>
-                </div>
-            </section>
+                </section>
 
-            <section class="module-section" data-module-panel="reports">
-                <div class="content-grid two-col">
-                    <div class="stack-col">
+                <section class="subpage" data-subpage="review-decision">
+                    <div class="grid two-col">
                         <div class="card">
-                            <div class="card-header">
+                            <div class="card-head">
                                 <div>
-                                    <p class="card-kicker">模块 3</p>
-                                    <h3>智能报告与证据输出</h3>
-                                </div>
-                                <span class="status-pill pending">可接入大模型</span>
-                            </div>
-
-                            <div class="report-actions">
-                                <button class="btn btn-primary" id="generateReportBtn">生成查勘结论</button>
-                                <button class="btn" id="exportPdfBtn">导出 PDF 说明</button>
-                            </div>
-
-                            <div class="feature-grid">
-                                <span class="feature-chip">农户可读版说明</span>
-                                <span class="feature-chip">保险公司归档版报告</span>
-                                <span class="feature-chip">原始影像嵌入</span>
-                                <span class="feature-chip">受灾图层截图</span>
-                                <span class="feature-chip">面积统计图</span>
-                                <span class="feature-chip">定损建议</span>
-                            </div>
-                        </div>
-
-                        <div class="card">
-                            <div class="card-header compact">
-                                <div>
-                                    <p class="card-kicker">证据目录</p>
-                                    <h3>归档要素清单</h3>
+                                    <p class="eyebrow">复核判定页</p>
+                                    <h3>模型结果 vs 人工意见对比</h3>
                                 </div>
                             </div>
-                            <div class="evidence-list" id="evidenceList"></div>
+                            <div class="compare-list" id="reviewCompareList"></div>
                         </div>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-header compact">
-                            <div>
-                                <p class="card-kicker">报告预览</p>
-                                <h3>自动生成内容</h3>
+                        <div class="card">
+                            <div class="card-head compact">
+                                <div>
+                                    <p class="eyebrow">人工复核修正</p>
+                                    <h3>结果修正与回写</h3>
+                                </div>
                             </div>
+                            <div class="form-grid">
+                                <input type="text" id="reviewerInput" placeholder="复核人">
+                                <select id="reviewLabelSelect">
+                                    <option value="病虫害">病虫害</option>
+                                    <option value="物理倒伏">物理倒伏</option>
+                                    <option value="正常收割">正常收割</option>
+                                    <option value="休耕">休耕</option>
+                                    <option value="非农地物">非农地物</option>
+                                    <option value="正常长势">正常长势</option>
+                                </select>
+                                <input type="number" id="reviewAreaInput" placeholder="修正面积(亩)" step="0.1">
+                                <textarea id="reviewCommentInput" placeholder="审核意见"></textarea>
+                                <label class="check-line">
+                                    <input type="checkbox" id="reviewResurveyCheckbox">
+                                    <span>是否进入复勘</span>
+                                </label>
+                                <button class="btn btn-primary" id="submitReviewBtn">提交人工复核</button>
+                            </div>
+                            <div class="review-log" id="reviewLogList"></div>
                         </div>
-                        <div class="report-preview" id="reportPreview"></div>
                     </div>
-                </div>
+                </section>
+
+                <section class="subpage" data-subpage="review-report">
+                    <div class="grid two-col">
+                        <div class="card">
+                            <div class="card-head">
+                                <div>
+                                    <p class="eyebrow">报告出证页</p>
+                                    <h3>农户说明书 / 保险归档报告</h3>
+                                </div>
+                            </div>
+                            <div class="action-row">
+                                <button class="btn btn-primary" id="generateReportBtn">生成报告内容</button>
+                                <button class="btn" id="exportPdfBtn">导出 PDF</button>
+                            </div>
+                            <div class="report-preview" id="reportPreview"></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-head compact">
+                                <div>
+                                    <p class="eyebrow">证据链归档</p>
+                                    <h3>证据目录 / 归档清单</h3>
+                                </div>
+                            </div>
+                            <div class="evidence-list" id="archiveEvidenceList"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="subpage" data-subpage="review-dispute">
+                    <div class="grid one-col">
+                        <div class="card">
+                            <div class="card-head">
+                                <div>
+                                    <p class="eyebrow">争议案件页</p>
+                                    <h3>争议案件池与二次复核</h3>
+                                </div>
+                            </div>
+                            <div class="task-list" id="disputeCaseList"></div>
+                        </div>
+                    </div>
+                </section>
             </section>
 
-            <section class="module-section" data-module-panel="dashboard">
-                <div class="dashboard-grid">
-                    <div class="metric-card" id="dashboardMetricCards"></div>
-                    <div class="card">
-                        <div class="card-header compact">
-                            <div>
-                                <p class="card-kicker">模块 4</p>
-                                <h3>风险监管大屏</h3>
-                            </div>
-                        </div>
-                        <div class="chart-shell">
-                            <canvas id="townRankingChart"></canvas>
-                        </div>
-                    </div>
-                    <div class="card">
-                        <div class="card-header compact">
-                            <div>
-                                <p class="card-kicker">致灾结构</p>
-                                <h3>病虫害 / 倒伏占比</h3>
-                            </div>
-                        </div>
-                        <div class="chart-shell">
-                            <canvas id="causeChart"></canvas>
-                        </div>
-                    </div>
-                    <div class="card">
-                        <div class="card-header compact">
-                            <div>
-                                <p class="card-kicker">热点区域</p>
-                                <h3>乡镇风险热度</h3>
-                            </div>
-                        </div>
-                        <div class="heat-list" id="heatList"></div>
-                    </div>
-                    <div class="card">
-                        <div class="card-header compact">
-                            <div>
-                                <p class="card-kicker">异常案件预警</p>
-                                <h3>风控提醒</h3>
-                            </div>
-                        </div>
-                        <div class="alert-list" id="alertList"></div>
-                    </div>
+            <section class="entry-panel" data-entry-panel="governance">
+                <div class="subnav">
+                    <button class="subnav-link active" data-subnav="governance-risk">风险大屏</button>
+                    <button class="subnav-link" data-subnav="governance-resource">资源调度</button>
+                    <button class="subnav-link" data-subnav="governance-risklab">风控研判</button>
                 </div>
-            </section>
 
-            <section class="module-section active static-section">
-                <div class="content-grid two-col">
-                    <div class="card">
-                        <div class="card-header compact">
-                            <div>
-                                <p class="card-kicker">加分功能 A</p>
-                                <h3>历史案件对比</h3>
+                <section class="subpage active" data-subpage="governance-risk">
+                    <div class="grid one-col">
+                        <div class="metric-grid" id="dashboardMetricCards"></div>
+                        <div class="grid two-col">
+                            <div class="card">
+                                <div class="card-head compact">
+                                    <div>
+                                        <p class="eyebrow">区域农险风险态势总览</p>
+                                        <h3>热点乡镇分布</h3>
+                                    </div>
+                                </div>
+                                <div class="chart-wrap"><canvas id="townRankingChart"></canvas></div>
+                            </div>
+                            <div class="card">
+                                <div class="card-head compact">
+                                    <div>
+                                        <p class="eyebrow">致灾结构分布</p>
+                                        <h3>病虫害 / 倒伏占比</h3>
+                                    </div>
+                                </div>
+                                <div class="chart-wrap"><canvas id="causeChart"></canvas></div>
                             </div>
                         </div>
-                        <div class="history-compare" id="historyCompare"></div>
-                    </div>
-                    <div class="card">
-                        <div class="card-header compact">
-                            <div>
-                                <p class="card-kicker">加分功能 B</p>
-                                <h3>防欺诈辅助判别</h3>
+                        <div class="grid two-col">
+                            <div class="card">
+                                <div class="card-head compact">
+                                    <div>
+                                        <p class="eyebrow">乡镇热度</p>
+                                        <h3>高风险区域</h3>
+                                    </div>
+                                </div>
+                                <div class="task-list" id="heatList"></div>
+                            </div>
+                            <div class="card">
+                                <div class="card-head compact">
+                                    <div>
+                                        <p class="eyebrow">异常案件预警</p>
+                                        <h3>预警中心</h3>
+                                    </div>
+                                </div>
+                                <div class="task-list" id="alertList"></div>
                             </div>
                         </div>
-                        <div class="risk-checks" id="riskChecks"></div>
                     </div>
-                </div>
+                </section>
+
+                <section class="subpage" data-subpage="governance-resource">
+                    <div class="grid two-col">
+                        <div class="card">
+                            <div class="card-head">
+                                <div>
+                                    <p class="eyebrow">资源调度页</p>
+                                    <h3>查勘员任务分配</h3>
+                                </div>
+                            </div>
+                            <div class="task-list" id="dispatchTaskList"></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-head compact">
+                                <div>
+                                    <p class="eyebrow">高风险区域优先级推荐</p>
+                                    <h3>无人机采集任务</h3>
+                                </div>
+                            </div>
+                            <div class="task-list" id="droneTaskList"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="subpage" data-subpage="governance-risklab">
+                    <div class="grid two-col">
+                        <div class="card">
+                            <div class="card-head">
+                                <div>
+                                    <p class="eyebrow">风控研判页</p>
+                                    <h3>重复报案 / 非农地物 / 时效异常</h3>
+                                </div>
+                            </div>
+                            <div class="task-list" id="riskCheckList"></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-head compact">
+                                <div>
+                                    <p class="eyebrow">非灾害状态识别</p>
+                                    <h3>休耕 / 正常收割识别</h3>
+                                </div>
+                            </div>
+                            <div class="detail-list" id="nonDisasterList"></div>
+                        </div>
+                    </div>
+                </section>
             </section>
         </main>
     </div>
