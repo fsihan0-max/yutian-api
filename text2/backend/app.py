@@ -1,0 +1,165 @@
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import numpy as np
+import json
+import rasterio
+from rasterio.io import MemoryFile
+from rasterio.mask import mask
+from rasterio.warp import transform_geom
+from shapely.geometry import Polygon
+from pystac_client import Client
+from skimage.feature import graycomatrix, graycoprops
+from skimage.measure import shannon_entropy
+
+app = Flask(__name__)
+CORS(app)
+
+STAC_API_URL = "https://earth-search.aws.element84.com/v1"
+
+@app.route('/api/analyze', methods=['POST'])
+def analyze_damage():
+    is_multipart = request.content_type and 'multipart/form-data' in request.content_type
+    has_file = is_multipart and 'file' in request.files
+
+    geom_data = request.form.get('geometry') if is_multipart else request.get_json().get('geometry')
+    area_mu = float(request.form.get('area_mu', 0)) if is_multipart else float(request.get_json().get('area_mu', 0))
+    
+    if not geom_data:
+        return jsonify({"error": "未接收到空间坐标！"}), 400
+
+    geom_json = json.loads(geom_data) if isinstance(geom_data, str) else geom_data
+    geojson_poly = {"type": "Polygon", "coordinates": geom_json.get('rings', [])}
+
+    if has_file:
+        engine_type = "用户提供: 无人机高分影像"
+        image_date = "用户实时上传 (无人机本地数据)"
+        file = request.files['file']
+        
+        try:
+            with MemoryFile(file.read()) as memfile:
+                with memfile.open() as dataset:
+                    tiff_crs = dataset.crs
+                    reprojected_poly = transform_geom('EPSG:4326', tiff_crs, geojson_poly)
+                    out_image, out_transform = mask(dataset, [reprojected_poly], crop=True)
+                    
+                    if dataset.count >= 4:
+                        b, g, r, nir = out_image[0], out_image[1], out_image[2], out_image[3]
+                    elif dataset.count == 3:
+                        b, g, r = out_image[0], out_image[1], out_image[2]
+                        nir = np.zeros_like(r) 
+                    else:
+                        r, nir = out_image[0], out_image[1]
+                        b, g = np.zeros_like(r), np.zeros_like(r)
+                        
+                    return process_pixels(b.astype(float), g.astype(float), r.astype(float), nir.astype(float), out_image[0], area_mu, engine_type, image_date)
+        except Exception as e:
+            return jsonify({"error": f"无人机影像解析失败: {str(e)}"}), 500
+
+    else:
+        engine_type = "云端直连: Sentinel-2 真实多光谱"
+        try:
+            catalog = Client.open(STAC_API_URL)
+            search = catalog.search(
+                collections=["sentinel-2-l2a"],
+                intersects=geojson_poly,
+                query={"eo:cloud_cover": {"lt": 20}},
+                max_items=1
+            )
+            items = list(search.items())
+            
+            if not items:
+                return jsonify({"error": "该区域近期无清晰卫星影像，请上传无人机影像。"}), 404
+                
+            item = items[0]
+            image_date = item.datetime.strftime("%Y-%m-%d %H:%M:%S UTC") if item.datetime else "实时获取"
+            
+            urls = {
+                "blue": item.assets["blue"].href,
+                "green": item.assets["green"].href,
+                "red": item.assets["red"].href,
+                "nir": item.assets["nir"].href
+            }
+            
+            bands_data = {}
+            for color, url in urls.items():
+                with rasterio.open(url) as src:
+                    reprojected_poly = transform_geom('EPSG:4326', src.crs, geojson_poly)
+                    data, _ = mask(src, [reprojected_poly], crop=True)
+                    bands_data[color] = data[0].astype(float)
+                
+            return process_pixels(bands_data["blue"], bands_data["green"], bands_data["red"], bands_data["nir"], bands_data["red"], area_mu, engine_type, image_date)
+            
+        except Exception as e:
+            return jsonify({"error": f"对接公开卫星数据源失败: {str(e)}"}), 500
+
+def process_pixels(b, g, r, nir, gray_band, area_mu, engine_type, image_date):
+    np.seterr(divide='ignore', invalid='ignore')
+    ndvi = (nir - r) / (nir + r)
+    
+    valid_mask = (r != 0) | (nir != 0)
+    valid_ndvi = ndvi[valid_mask]
+    
+    if len(valid_ndvi) == 0:
+        return jsonify({"error": "计算失败：该图斑内无有效数据"}), 400
+
+    healthy_mask = (ndvi >= 0.35) & valid_mask
+    damaged_mask = (ndvi < 0.35) & valid_mask
+
+    damage_ratio_float = float(np.sum(damaged_mask) / len(valid_ndvi))
+    damaged_mu = area_mu * damage_ratio_float
+
+    def get_mean_reflectance(band_array, mask_array):
+        if not np.any(mask_array): return 0.0
+        mean_val = np.mean(band_array[mask_array])
+        scale = 255.0 if "无人机" in engine_type else 100.0
+        return min(100.0, float(mean_val / scale))
+
+    spectral_healthy = [
+        get_mean_reflectance(b, healthy_mask), get_mean_reflectance(g, healthy_mask),
+        get_mean_reflectance(r, healthy_mask), get_mean_reflectance(nir, healthy_mask)
+    ]
+    spectral_damaged = [
+        get_mean_reflectance(b, damaged_mask), get_mean_reflectance(g, damaged_mask),
+        get_mean_reflectance(r, damaged_mask), get_mean_reflectance(nir, damaged_mask)
+    ]
+
+    min_val, max_val = gray_band[valid_mask].min(), gray_band[valid_mask].max()
+    gray_8bit = np.uint8(255 * (gray_band - min_val) / (max_val - min_val)) if max_val > min_val else np.zeros_like(gray_band, dtype=np.uint8)
+
+    glcm = graycomatrix(gray_8bit, distances=[1], angles=[0], levels=256, symmetric=True, normed=True)
+    real_contrast = float(graycoprops(glcm, 'contrast')[0, 0])
+    real_entropy = float(shannon_entropy(gray_8bit[valid_mask]))
+
+    # === 🚀 全新智能诊断逻辑 ===
+    if damage_ratio_float < 0.01:
+        cause_type = "healthy"
+        cause_analysis = "长势良好，未检测到明显灾害特征"
+    elif real_contrast > 400.0: # 如果对比度破天荒地高，说明框到了房子马路
+        cause_type = "non_agri"
+        cause_analysis = "非农地物干扰 (识别到建筑/道路/裸土，请框选纯净农田)"
+    elif real_contrast > 80.0 or real_entropy > 6.5:
+        cause_type = "disaster"
+        cause_analysis = "自然灾害 (高频纹理/作物定向倒伏)"
+    else:
+        cause_type = "management"
+        cause_analysis = "疑似管理不善 (平滑低熵/缺水病害)"
+
+    return jsonify({
+        "status": "success",
+        "engine_type": engine_type,
+        "image_date": image_date,
+        "total_area_mu": round(area_mu, 2),
+        "damaged_area_mu": round(damaged_mu, 2),
+        "damage_ratio_float": damage_ratio_float,
+        "damage_ratio": f"{round(damage_ratio_float * 100, 1)}%",
+        "glcm_metrics": {
+            "contrast": round(real_contrast, 2), 
+            "entropy": round(real_entropy, 2), 
+            "cause_analysis": cause_analysis,
+            "cause_type": cause_type  # 把病因类型传给前端
+        },
+        "spectral_data": {"healthy": spectral_healthy, "damaged": spectral_damaged}
+    })
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)

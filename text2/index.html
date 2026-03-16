@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>豫田智保平台 - 农险查勘、案件管理与风险监管</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
+    <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/light/main.css">
+    <script src="https://js.arcgis.com/4.28/"></script>
+</head>
+<body>
+    <div class="platform-shell">
+        <aside class="platform-sidebar">
+            <div class="brand-block">
+                <div class="brand-badge">YTZB</div>
+                <div>
+                    <h1>豫田智保平台</h1>
+                    <p>农险查勘定损与风险监管一体化 SaaS</p>
+                </div>
+            </div>
+
+            <nav class="module-nav">
+                <button class="module-link active" data-module="survey">智能查勘定损</button>
+                <button class="module-link" data-module="cases">案件管理</button>
+                <button class="module-link" data-module="reports">智能报告与证据输出</button>
+                <button class="module-link" data-module="dashboard">风险监管大屏</button>
+            </nav>
+
+            <section class="sidebar-panel">
+                <h2>平台能力</h2>
+                <ul class="tag-list">
+                    <li>多边形框选地块</li>
+                    <li>无人机 GeoTIFF 上传</li>
+                    <li>Sentinel-2 STAC 调用</li>
+                    <li>NDVI + GLCM 联合识别</li>
+                    <li>案件状态流转</li>
+                    <li>报告输出</li>
+                    <li>风险监管与风控提醒</li>
+                </ul>
+            </section>
+
+            <section class="sidebar-panel">
+                <h2>今日快照</h2>
+                <div class="mini-stat-list" id="miniStatList"></div>
+            </section>
+        </aside>
+
+        <main class="platform-main">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">农业保险精细化查勘平台</p>
+                    <h2 id="moduleTitle">智能查勘定损核心模块</h2>
+                </div>
+                <div class="topbar-meta">
+                    <span>运行状态：在线</span>
+                    <span>数据模式：演示环境</span>
+                </div>
+            </header>
+
+            <section class="hero-strip">
+                <article class="hero-card hero-primary">
+                    <p class="hero-label">核心定位</p>
+                    <h3>以真实遥感分析为核心，向案件、报告、监管延展</h3>
+                    <p>保留查勘定损主链路，同时增加平台化运营能力，让系统从算法演示升级为可管理、可归档、可监管的农险平台。</p>
+                </article>
+                <article class="hero-card">
+                    <p class="hero-label">加分功能</p>
+                    <h3>历史案件对比 + 防欺诈辅助判别</h3>
+                    <p>同地块历史记录、重复报案提醒、影像时间核验、非农地物识别共同构成风控辅助层。</p>
+                </article>
+            </section>
+
+            <section class="module-section active" data-module-panel="survey">
+                <div class="content-grid survey-grid">
+                    <div class="card control-card">
+                        <div class="card-header">
+                            <div>
+                                <p class="card-kicker">模块 1</p>
+                                <h3>智能查勘定损核心模块</h3>
+                            </div>
+                            <span class="status-pill online">核心运行中</span>
+                        </div>
+
+                        <div class="inline-controls">
+                            <div class="search-bar-inline">
+                                <input type="text" id="searchInput" placeholder="输入村镇、地址或地块定位...">
+                                <button id="btnSearch">定位</button>
+                            </div>
+                            <div class="toggle-row">
+                                <button id="btn-vector" class="btn active">矢量底图</button>
+                                <button id="btn-satellite" class="btn">影像底图</button>
+                            </div>
+                        </div>
+
+                        <div class="tool-group">
+                            <h4>采集与分析链路</h4>
+                            <p class="muted">支持无人机 GeoTIFF 上传与 Sentinel-2 在线获取双通道分析。</p>
+                            <input type="file" id="drone-upload-input" accept=".tif,.tiff" hidden>
+                            <button id="btn-upload-drone" class="btn btn-accent">上传无人机正射影像 (GeoTIFF)</button>
+                            <button id="btn-analyze" class="btn btn-primary" disabled>提交智能定损分析</button>
+                        </div>
+
+                        <div class="tool-group">
+                            <h4>当前能力清单</h4>
+                            <div class="feature-grid">
+                                <span class="feature-chip">多边形框选</span>
+                                <span class="feature-chip">STAC 拉取</span>
+                                <span class="feature-chip">NDVI 识别</span>
+                                <span class="feature-chip">GLCM 纹理分析</span>
+                                <span class="feature-chip">受灾面积统计</span>
+                                <span class="feature-chip">成因判别</span>
+                            </div>
+                        </div>
+
+                        <div id="report-panel" class="report-panel" hidden>
+                            <div class="card-header compact">
+                                <div>
+                                    <p class="card-kicker">分析结果</p>
+                                    <h4>智能定损分析报告</h4>
+                                </div>
+                            </div>
+                            <div class="report-content" id="report-content"></div>
+                            <div class="chart-container">
+                                <canvas id="spectralChart"></canvas>
+                            </div>
+                            <div class="report-explanation" id="report-explanation"></div>
+                        </div>
+                    </div>
+
+                    <div class="card map-card">
+                        <div class="card-header compact">
+                            <div>
+                                <p class="card-kicker">地图工作台</p>
+                                <h3>地块圈选与结果叠加</h3>
+                            </div>
+                        </div>
+                        <div id="viewDiv"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="module-section" data-module-panel="cases">
+                <div class="content-grid two-col">
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <p class="card-kicker">模块 2</p>
+                                <h3>案件管理模块</h3>
+                            </div>
+                            <span class="status-pill review">平台化能力</span>
+                        </div>
+
+                        <div class="filter-grid">
+                            <select id="filterTown"></select>
+                            <select id="filterVillage"></select>
+                            <select id="filterCrop"></select>
+                            <select id="filterStatus"></select>
+                        </div>
+
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>案件编号</th>
+                                        <th>乡镇 / 行政村</th>
+                                        <th>作物</th>
+                                        <th>状态</th>
+                                        <th>查勘员</th>
+                                        <th>受灾时间</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="caseTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="stack-col">
+                        <div class="card">
+                            <div class="card-header compact">
+                                <div>
+                                    <p class="card-kicker">案件详情</p>
+                                    <h3 id="caseDetailTitle">请选择案件</h3>
+                                </div>
+                            </div>
+                            <div class="detail-grid" id="caseDetailGrid"></div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header compact">
+                                <div>
+                                    <p class="card-kicker">状态流转</p>
+                                    <h3>案件进度</h3>
+                                </div>
+                            </div>
+                            <div class="status-flow" id="statusFlow"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="module-section" data-module-panel="reports">
+                <div class="content-grid two-col">
+                    <div class="stack-col">
+                        <div class="card">
+                            <div class="card-header">
+                                <div>
+                                    <p class="card-kicker">模块 3</p>
+                                    <h3>智能报告与证据输出</h3>
+                                </div>
+                                <span class="status-pill pending">可接入大模型</span>
+                            </div>
+
+                            <div class="report-actions">
+                                <button class="btn btn-primary" id="generateReportBtn">生成查勘结论</button>
+                                <button class="btn" id="exportPdfBtn">导出 PDF 说明</button>
+                            </div>
+
+                            <div class="feature-grid">
+                                <span class="feature-chip">农户可读版说明</span>
+                                <span class="feature-chip">保险公司归档版报告</span>
+                                <span class="feature-chip">原始影像嵌入</span>
+                                <span class="feature-chip">受灾图层截图</span>
+                                <span class="feature-chip">面积统计图</span>
+                                <span class="feature-chip">定损建议</span>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header compact">
+                                <div>
+                                    <p class="card-kicker">证据目录</p>
+                                    <h3>归档要素清单</h3>
+                                </div>
+                            </div>
+                            <div class="evidence-list" id="evidenceList"></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header compact">
+                            <div>
+                                <p class="card-kicker">报告预览</p>
+                                <h3>自动生成内容</h3>
+                            </div>
+                        </div>
+                        <div class="report-preview" id="reportPreview"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="module-section" data-module-panel="dashboard">
+                <div class="dashboard-grid">
+                    <div class="metric-card" id="dashboardMetricCards"></div>
+                    <div class="card">
+                        <div class="card-header compact">
+                            <div>
+                                <p class="card-kicker">模块 4</p>
+                                <h3>风险监管大屏</h3>
+                            </div>
+                        </div>
+                        <div class="chart-shell">
+                            <canvas id="townRankingChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header compact">
+                            <div>
+                                <p class="card-kicker">致灾结构</p>
+                                <h3>病虫害 / 倒伏占比</h3>
+                            </div>
+                        </div>
+                        <div class="chart-shell">
+                            <canvas id="causeChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header compact">
+                            <div>
+                                <p class="card-kicker">热点区域</p>
+                                <h3>乡镇风险热度</h3>
+                            </div>
+                        </div>
+                        <div class="heat-list" id="heatList"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header compact">
+                            <div>
+                                <p class="card-kicker">异常案件预警</p>
+                                <h3>风控提醒</h3>
+                            </div>
+                        </div>
+                        <div class="alert-list" id="alertList"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="module-section active static-section">
+                <div class="content-grid two-col">
+                    <div class="card">
+                        <div class="card-header compact">
+                            <div>
+                                <p class="card-kicker">加分功能 A</p>
+                                <h3>历史案件对比</h3>
+                            </div>
+                        </div>
+                        <div class="history-compare" id="historyCompare"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header compact">
+                            <div>
+                                <p class="card-kicker">加分功能 B</p>
+                                <h3>防欺诈辅助判别</h3>
+                            </div>
+                        </div>
+                        <div class="risk-checks" id="riskChecks"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="js/main.js"></script>
+</body>
+</html>
