@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "id": "876c1ff5d5",
+    "case_id": "YT-20260316-001",
+    "reviewer": "7777",
+    "corrected_label": "病虫害",
+    "corrected_area_mu": "",
+    "comment": "",
+    "requires_resurvey": false,
+    "created_at": "2026-03-16T16:16:16Z"
+  }
+]
