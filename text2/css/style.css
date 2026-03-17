@@ -442,6 +442,125 @@ textarea {
     min-height: 640px;
 }
 
+.map-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.map-panel-header .panel-title {
+    margin-bottom: 0;
+}
+
+.map-basemap-toggle {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.minor-title {
+    margin-top: 8px;
+}
+
+#reviewActionPanel {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.evidence-item {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: #fff;
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 10px;
+    align-items: start;
+}
+
+.evidence-thumb {
+    width: 100px;
+    height: 75px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: #eef2f7;
+}
+
+.evidence-meta strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 13px;
+}
+
+.evidence-meta p {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: grid;
+    place-items: center;
+}
+
+.modal-mask {
+    position: absolute;
+    inset: 0;
+    background: rgba(13, 18, 26, 0.48);
+}
+
+.modal-content {
+    position: relative;
+    width: min(920px, 92vw);
+    max-height: 90vh;
+    overflow: auto;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: #fff;
+    box-shadow: var(--shadow);
+    padding: 14px;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.modal-header h2 {
+    font-size: 18px;
+}
+
+.modal-body {
+    display: grid;
+    gap: 8px;
+}
+
+#reportPreviewContent .report-line {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+#reportPreviewContent .report-line strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 13px;
+}
+
+#reportPreviewContent .report-line p {
+    color: var(--muted);
+    font-size: 13px;
+}
+
 #viewDiv {
     width: 100%;
     height: 610px;
@@ -478,5 +597,28 @@ textarea {
     .metrics-grid,
     .two-col {
         grid-template-columns: 1fr;
+    }
+}
+
+@media print {
+    body.print-report-mode .app-shell {
+        display: none !important;
+    }
+    body.print-report-mode #reportModal {
+        position: static;
+        display: block !important;
+    }
+    body.print-report-mode .modal-mask,
+    body.print-report-mode #closeReportModalBtn {
+        display: none !important;
+    }
+    body.print-report-mode .modal-content {
+        width: 100%;
+        max-height: none;
+        max-width: none;
+        box-shadow: none;
+        border: none;
+        border-radius: 0;
+        padding: 0;
     }
 }

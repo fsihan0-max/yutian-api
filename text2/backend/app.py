@@ -288,44 +288,6 @@ def fetch_stac_bands(geojson_poly):
     return bands, image_date
 
 
-def generate_demo_bands(crop_mode, geojson_poly):
-    coords = np.array(geojson_poly["coordinates"][0], dtype=float)
-    seed = int(abs(coords.mean()) * 1_000_000) % (2 ** 32)
-    rng = np.random.default_rng(seed)
-    size = 128
-    x = np.linspace(-1, 1, size)
-    y = np.linspace(-1, 1, size)
-    xx, yy = np.meshgrid(x, y)
-    radial = np.sqrt(xx ** 2 + yy ** 2)
-    stripe = 0.5 + 0.5 * np.sin(8 * xx + 3 * yy)
-    stress = np.exp(-((xx - 0.25) ** 2 + (yy + 0.15) ** 2) / 0.12)
-    noise = rng.normal(0, 0.015, size=(size, size))
-
-    if crop_mode == "corn":
-        nir = 0.72 - 0.28 * stress + 0.08 * stripe + noise
-        red = 0.18 + 0.12 * stress + 0.03 * radial + noise
-        green = 0.22 + 0.08 * stripe + noise
-        blue = 0.12 + 0.04 * radial + noise
-        rededge = 0.42 - 0.18 * stress + 0.05 * stripe + noise
-        swir = 0.24 + 0.16 * stress + 0.08 * radial + noise
-    else:
-        nir = 0.66 - 0.24 * stress + 0.07 * stripe + noise
-        red = 0.16 + 0.10 * stress + 0.03 * radial + noise
-        green = 0.20 + 0.07 * stripe + noise
-        blue = 0.11 + 0.04 * radial + noise
-        rededge = 0.38 - 0.15 * stress + 0.05 * stripe + noise
-        swir = 0.22 + 0.14 * stress + 0.07 * radial + noise
-
-    return {
-        "blue": np.clip(blue * 100, 0, 100),
-        "green": np.clip(green * 100, 0, 100),
-        "red": np.clip(red * 100, 0, 100),
-        "rededge": np.clip(rededge * 100, 0, 100),
-        "nir": np.clip(nir * 100, 0, 100),
-        "swir": np.clip(swir * 100, 0, 100),
-    }
-
-
 def summarize_index(name, values):
     valid = values[np.isfinite(values)]
     low, high = percentile_clip(valid)
@@ -716,9 +678,7 @@ def analyze_damage():
             try:
                 bands, image_date = fetch_stac_bands(geojson_poly)
             except Exception as exc:
-                bands = generate_demo_bands(crop_mode, geojson_poly)
-                image_date = "演示兜底多光谱"
-                engine_type = f"云端兜底: 演示合成多光谱 ({str(exc)[:60]})"
+                return jsonify({"error": "该区域近期无可用卫星数据，请上传无人机影像。", "details": str(exc)}), 404
 
         result = assemble_analysis_result(
             bands=bands,

@@ -7,9 +7,9 @@ window.AppData = {
     },
     menus: [
         { key: "workbench", label: "工作台", roles: ["surveyor", "reviewer", "admin"] },
-        { key: "survey", label: "查勘定损", roles: ["surveyor", "admin"] },
-        { key: "cases", label: "案件中心", roles: ["surveyor", "reviewer", "admin"] },
-        { key: "reports", label: "报告中心", roles: ["reviewer", "admin"] },
+        { key: "survey", label: "查勘定损", roles: ["surveyor"] },
+        { key: "cases", label: "案件中心", roles: ["surveyor", "reviewer"] },
+        { key: "reports", label: "报告中心", roles: ["reviewer"] },
         { key: "risk", label: "风险监管", roles: ["admin"] },
         { key: "data", label: "数据资源", roles: ["surveyor", "admin"] },
         { key: "settings", label: "系统设置", roles: ["admin"] }

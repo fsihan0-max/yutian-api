@@ -42,7 +42,7 @@
                     <div class="metrics-grid" id="workbenchMetrics"></div>
                     <div class="two-col">
                         <article class="panel">
-                            <div class="panel-title">我的待办</div>
+                            <div class="panel-title" id="workbenchTodoTitle">我的待办</div>
                             <div id="todoList" class="item-list"></div>
                         </article>
                         <article class="panel">
@@ -52,7 +52,7 @@
                     </div>
                     <div class="two-col">
                         <article class="panel">
-                            <div class="panel-title">最近处理案件</div>
+                            <div class="panel-title" id="workbenchRecentTitle">最近处理案件</div>
                             <table class="table">
                                 <thead>
                                     <tr>
@@ -111,7 +111,13 @@
                                 <div class="result-block" id="analyzeResult"></div>
                             </article>
                             <article class="panel map-panel">
-                                <div class="panel-title">地图与 AOI</div>
+                                <div class="map-panel-header">
+                                    <div class="panel-title">地图与 AOI</div>
+                                    <div class="map-basemap-toggle">
+                                        <button class="btn btn-small active" id="baseMapVecBtn" type="button">天地图矢量</button>
+                                        <button class="btn btn-small" id="baseMapImgBtn" type="button">天地图卫星</button>
+                                    </div>
+                                </div>
                                 <div id="viewDiv"></div>
                             </article>
                         </div>
@@ -135,6 +141,7 @@
                                     <button class="btn" data-sample-label="fallow" type="button">标注休耕</button>
                                 </div>
                                 <input id="sampleNoteInput" type="text" placeholder="标注备注">
+                                <div class="panel-title minor-title">同地块特征</div>
                                 <div class="item-list" id="featureList"></div>
                             </article>
                             <article class="panel">
@@ -187,18 +194,24 @@
                             <div class="panel-title">案件详情</div>
                             <div id="caseDetail" class="item-list"></div>
                         </article>
-                        <article class="panel">
+                        <article class="panel" id="reviewPanel">
                             <div class="panel-title">结果复核</div>
-                            <select id="reviewLabelSelect">
-                                <option value="病虫害">病虫害</option>
-                                <option value="物理倒伏">物理倒伏</option>
-                                <option value="正常收割">正常收割</option>
-                                <option value="休耕">休耕</option>
-                                <option value="非农地物">非农地物</option>
-                            </select>
-                            <input id="reviewAreaInput" type="number" step="0.1" placeholder="复核面积(亩)">
-                            <textarea id="reviewCommentInput" placeholder="复核说明"></textarea>
-                            <button class="btn btn-primary" id="submitReviewBtn" type="button">提交复核</button>
+                            <div class="list-item hidden" id="reviewReadonlyHint">
+                                <strong>当前角色无复核权限</strong>
+                                <p>查勘员仅可查看案件详情，不能提交复核。</p>
+                            </div>
+                            <div id="reviewActionPanel">
+                                <select id="reviewLabelSelect">
+                                    <option value="病虫害">病虫害</option>
+                                    <option value="物理倒伏">物理倒伏</option>
+                                    <option value="正常收割">正常收割</option>
+                                    <option value="休耕">休耕</option>
+                                    <option value="非农地物">非农地物</option>
+                                </select>
+                                <input id="reviewAreaInput" type="number" step="0.1" placeholder="复核面积(亩)">
+                                <textarea id="reviewCommentInput" placeholder="复核说明"></textarea>
+                                <button class="btn btn-primary" id="submitReviewBtn" type="button">提交复核</button>
+                            </div>
                             <div class="item-list" id="disputeList"></div>
                         </article>
                     </div>
@@ -272,6 +285,17 @@
                     </div>
                 </section>
             </main>
+        </div>
+    </div>
+
+    <div class="modal hidden" id="reportModal" role="dialog" aria-modal="true" aria-labelledby="reportModalTitle">
+        <div class="modal-mask" id="closeReportModalMask"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="reportModalTitle">报告预览</h2>
+                <button class="btn btn-small" id="closeReportModalBtn" type="button">关闭</button>
+            </div>
+            <div class="modal-body" id="reportPreviewContent"></div>
         </div>
     </div>
 
