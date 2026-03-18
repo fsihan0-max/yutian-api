@@ -1,0 +1,10 @@
+import { renderRiskCenter } from "../views/risk.js";
+import { syncRiskSource } from "../services/riskService.js";
+
+export function renderRiskModule(state) {
+  state.riskSnapshot = syncRiskSource({
+    cases: state.cases,
+    disputes: state.disputes
+  });
+  renderRiskCenter(state, state.riskSnapshot);
+}

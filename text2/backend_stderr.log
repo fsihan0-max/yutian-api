@@ -1,12 +1,19 @@
 WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
  * Running on all addresses (0.0.0.0)
  * Running on http://127.0.0.1:5000
- * Running on http://10.174.251.157:5000
+ * Running on http://10.175.170.174:5000
 Press CTRL+C to quit
-127.0.0.1 - - [17/Mar/2026 15:27:12] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [17/Mar/2026 15:27:26] "POST /api/analyze HTTP/1.1" 404 -
-127.0.0.1 - - [17/Mar/2026 15:28:08] "POST /api/analyze HTTP/1.1" 404 -
-127.0.0.1 - - [17/Mar/2026 15:31:42] "GET / HTTP/1.1" 404 -
-127.0.0.1 - - [17/Mar/2026 15:31:42] "GET /favicon.ico HTTP/1.1" 404 -
-127.0.0.1 - - [17/Mar/2026 15:31:58] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [17/Mar/2026 15:32:01] "GET /api/samples HTTP/1.1" 200 -
+127.0.0.1 - - [18/Mar/2026 13:36:40] "GET /api/health HTTP/1.1" 200 -
+E:\agri_sass\text2\backend\app.py:699: RuntimeWarning: invalid value encountered in cast
+  gray_8bit = np.uint8(255 * (red - gray_min) / (gray_max - gray_min))
+127.0.0.1 - - [18/Mar/2026 13:38:08] "POST /api/analyze HTTP/1.1" 200 -
+127.0.0.1 - - [18/Mar/2026 13:39:19] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [18/Mar/2026 13:39:19] "GET /api/samples HTTP/1.1" 200 -
+127.0.0.1 - - [18/Mar/2026 13:39:40] "OPTIONS /api/analyze HTTP/1.1" 200 -
+127.0.0.1 - - [18/Mar/2026 13:39:53] "OPTIONS /api/analyze HTTP/1.1" 200 -
+C:\Users\86156\.conda\envs\agri_saas\lib\site-packages\rasterio\features.py:392: NotGeoreferencedWarning: Dataset has no geotransform, gcps, or rpcs. The identity matrix will be returned.
+  _rasterize(valid_shapes, out, transform, all_touched, merge_alg)
+127.0.0.1 - - [18/Mar/2026 13:40:38] "POST /api/analyze HTTP/1.1" 200 -
+127.0.0.1 - - [18/Mar/2026 13:40:38] "POST /api/analyze HTTP/1.1" 200 -
+127.0.0.1 - - [18/Mar/2026 13:40:38] "POST /api/analyze HTTP/1.1" 200 -
+127.0.0.1 - - [18/Mar/2026 13:40:38] "POST /api/analyze HTTP/1.1" 200 -

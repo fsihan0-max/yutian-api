@@ -1,16 +1,52 @@
+﻿
+import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 import json
-import math
 import uuid
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+
+
+def configure_proj_runtime():
+    """Prefer conda's shared PROJ/GDAL data to avoid mixed-database issues."""
+    candidate_prefixes = []
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        candidate_prefixes.append(Path(conda_prefix))
+    candidate_prefixes.append(Path(sys.prefix))
+    exe_parent = Path(sys.executable).resolve().parent
+    candidate_prefixes.append(exe_parent)
+    candidate_prefixes.append(exe_parent.parent)
+
+    seen = set()
+    for prefix in candidate_prefixes:
+        prefix = Path(prefix)
+        if prefix in seen:
+            continue
+        seen.add(prefix)
+        proj_dir = prefix / "Library" / "share" / "proj"
+        if not proj_dir.exists():
+            continue
+        os.environ["PROJ_LIB"] = str(proj_dir)
+        os.environ["PROJ_DATA"] = str(proj_dir)
+
+        gdal_dir = prefix / "Library" / "share" / "gdal"
+        if gdal_dir.exists():
+            os.environ["GDAL_DATA"] = str(gdal_dir)
+        break
+
+
+configure_proj_runtime()
+
 import numpy as np
 import rasterio
+from rasterio.enums import Resampling
 from rasterio.io import MemoryFile
 from rasterio.mask import mask
-from rasterio.warp import transform_geom
+from rasterio.warp import reproject, transform_geom
 from pystac_client import Client
 
 app = Flask(__name__)
@@ -49,7 +85,7 @@ FEATURE_LABELS = {
     "bsi": "BSI",
     "contrast": "纹理对比度",
     "entropy": "纹理熵",
-    "damage_ratio": "异常像素占比",
+    "damage_ratio": "异常像元占比",
 }
 
 CROP_CONFIGS = {
@@ -103,6 +139,8 @@ THEMATIC_META = {
     "bsi": {"label": "BSI 专题", "palette": ["#1f3b4d", "#93a8ac", "#d2872c"]},
 }
 
+PIXEL_CLASS_KEYS = ("healthy", "pest", "lodging", "harvest", "fallow")
+
 
 def ensure_data_files():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -136,8 +174,8 @@ def safe_mean(values):
 
 def safe_index(numerator, denominator):
     result = np.full(numerator.shape, np.nan, dtype=float)
-    mask = np.isfinite(numerator) & np.isfinite(denominator) & (denominator != 0)
-    result[mask] = numerator[mask] / denominator[mask]
+    mask_idx = np.isfinite(numerator) & np.isfinite(denominator) & (denominator != 0)
+    result[mask_idx] = numerator[mask_idx] / denominator[mask_idx]
     return result
 
 
@@ -257,7 +295,7 @@ def fetch_stac_bands(geojson_poly):
     )
     items = list(search.items())
     if not items:
-        raise ValueError("该区域近期无清晰卫星影像，请上传无人机影像。")
+        raise ValueError("该区域近期无可用的低云量卫星影像，请改用无人机影像。")
 
     item = items[0]
     image_date = item.datetime.strftime("%Y-%m-%d %H:%M:%S UTC") if item.datetime else "实时获取"
@@ -270,7 +308,7 @@ def fetch_stac_bands(geojson_poly):
         "swir": "swir16",
     }
 
-    bands = {}
+    resolved_assets = {}
     for key, asset_name in asset_names.items():
         asset = item.assets.get(asset_name)
         if asset is None and key == "swir":
@@ -279,14 +317,42 @@ def fetch_stac_bands(geojson_poly):
             asset = item.assets.get("rededge2")
         if asset is None:
             raise ValueError(f"卫星资产缺失: {asset_name}")
+        resolved_assets[key] = asset
 
+    ref_asset = resolved_assets["red"]
+    with rasterio.open(ref_asset.href) as ref_src:
+        ref_poly = transform_geom("EPSG:4326", ref_src.crs, geojson_poly)
+        ref_data, ref_transform = mask(ref_src, [ref_poly], crop=True, filled=False)
+        ref_array = ref_data[0].astype(np.float32).filled(np.nan)
+        ref_shape = ref_array.shape
+        ref_crs = ref_src.crs
+
+    bands = {}
+    for key, asset in resolved_assets.items():
         with rasterio.open(asset.href) as src:
-            reprojected_poly = transform_geom("EPSG:4326", src.crs, geojson_poly)
-            data, _ = mask(src, [reprojected_poly], crop=True)
-            bands[key] = data[0].astype(float)
+            src_poly = transform_geom("EPSG:4326", src.crs, geojson_poly)
+            src_data, src_transform = mask(src, [src_poly], crop=True, filled=False)
+            src_array = src_data[0].astype(np.float32).filled(np.nan)
+
+            if src_array.shape == ref_shape and src.crs == ref_crs and src_transform == ref_transform:
+                bands[key] = src_array.astype(float)
+                continue
+
+            dst_array = np.full(ref_shape, np.nan, dtype=np.float32)
+            reproject(
+                source=src_array,
+                destination=dst_array,
+                src_transform=src_transform,
+                src_crs=src.crs,
+                src_nodata=np.nan,
+                dst_transform=ref_transform,
+                dst_crs=ref_crs,
+                dst_nodata=np.nan,
+                resampling=Resampling.bilinear,
+            )
+            bands[key] = dst_array.astype(float)
 
     return bands, image_date
-
 
 def summarize_index(name, values):
     valid = values[np.isfinite(values)]
@@ -309,6 +375,18 @@ def summarize_index(name, values):
     }
 
 
+def build_top_feature_list_from_scores(feature_scores):
+    ranked = sorted(feature_scores.items(), key=lambda item: abs(float(item[1])), reverse=True)[:3]
+    return [
+        {
+            "feature": key,
+            "label": FEATURE_LABELS.get(key, key),
+            "weight": round(float(value), 4),
+        }
+        for key, value in ranked
+    ]
+
+
 def build_rule_result(feature_vector, crop_mode):
     config = get_crop_config(crop_mode)
     ndvi = feature_vector["ndvi"]
@@ -321,7 +399,7 @@ def build_rule_result(feature_vector, crop_mode):
     if bsi >= config["non_agri_bsi"] and ndvi <= config["non_agri_ndvi"]:
         label_key = "non_agri"
         score = min(0.99, 0.58 + (bsi - config["non_agri_bsi"]) * 1.8)
-        explanation = "BSI 偏高且 NDVI 偏低，地块呈现道路、建筑或裸土特征。"
+        explanation = "BSI 偏高且 NDVI 偏低，地块更接近建筑、道路或裸地。"
         feature_scores = {
             "bsi": bsi - config["non_agri_bsi"],
             "ndvi": config["non_agri_ndvi"] - ndvi,
@@ -330,7 +408,7 @@ def build_rule_result(feature_vector, crop_mode):
     elif ndvi <= config["harvest_ndvi"] and bsi >= config["fallow_bsi"]:
         label_key = "fallow"
         score = min(0.95, 0.55 + (bsi - config["fallow_bsi"]) * 1.2)
-        explanation = "植被指数偏低且裸土指数偏高，更符合休耕地块状态。"
+        explanation = "植被指数偏低且裸土指数偏高，符合休耕地块特征。"
         feature_scores = {
             "bsi": bsi - config["fallow_bsi"],
             "ndvi": config["harvest_ndvi"] - ndvi,
@@ -339,7 +417,7 @@ def build_rule_result(feature_vector, crop_mode):
     elif ndvi <= config["harvest_ndvi"] and ndmi <= config["harvest_ndmi"]:
         label_key = "harvest"
         score = min(0.93, 0.56 + (config["harvest_ndvi"] - ndvi) * 1.0)
-        explanation = "植被指数与水分指数同步回落，符合正常收割后的光谱特征。"
+        explanation = "植被指数和水分指数同步回落，更接近收割后地块。"
         feature_scores = {
             "ndvi": config["harvest_ndvi"] - ndvi,
             "ndmi": config["harvest_ndmi"] - ndmi,
@@ -348,7 +426,7 @@ def build_rule_result(feature_vector, crop_mode):
     elif contrast >= config["lodging_contrast"] or entropy >= config["lodging_entropy"]:
         label_key = "lodging"
         score = min(0.98, 0.62 + max(contrast - config["lodging_contrast"], entropy - config["lodging_entropy"]) / 80)
-        explanation = "纹理对比度或熵值明显升高，说明冠层结构被破坏，倾向物理倒伏。"
+        explanation = "纹理对比度或熵显著升高，地物结构受扰动，倾向倒伏。"
         feature_scores = {
             "contrast": (contrast - config["lodging_contrast"]) / 60,
             "entropy": entropy - config["lodging_entropy"],
@@ -357,7 +435,7 @@ def build_rule_result(feature_vector, crop_mode):
     elif ndvi < config["damage_ndvi"] or ndmi < config["pest_ndmi"]:
         label_key = "pest"
         score = min(0.96, 0.58 + max(config["damage_ndvi"] - ndvi, config["pest_ndmi"] - ndmi) * 1.3)
-        explanation = "植被指数下降而纹理未明显倒伏，更接近病虫害或生理胁迫造成的异常。"
+        explanation = "植被指数下降且纹理未明显倒伏，更接近病虫害或生理胁迫。"
         feature_scores = {
             "ndvi": config["damage_ndvi"] - ndvi,
             "ndmi": config["pest_ndmi"] - ndmi,
@@ -366,7 +444,7 @@ def build_rule_result(feature_vector, crop_mode):
     else:
         label_key = "healthy"
         score = min(0.94, 0.58 + max(0.0, ndvi - config["damage_ndvi"]))
-        explanation = "主要指数处于健康区间，未出现显著灾损或非灾害状态异常。"
+        explanation = "主要指标处于健康区间，未见显著灾损。"
         feature_scores = {
             "ndvi": ndvi,
             "ndre": feature_vector["ndre"],
@@ -381,18 +459,6 @@ def build_rule_result(feature_vector, crop_mode):
         "explanation": explanation,
         "top_features": top_features,
     }
-
-
-def build_top_feature_list_from_scores(feature_scores):
-    ranked = sorted(feature_scores.items(), key=lambda item: abs(float(item[1])), reverse=True)[:3]
-    return [
-        {
-            "feature": key,
-            "label": FEATURE_LABELS.get(key, key),
-            "weight": round(float(value), 4),
-        }
-        for key, value in ranked
-    ]
 
 
 def get_training_samples(crop_mode):
@@ -424,7 +490,7 @@ def build_ml_result(feature_vector, crop_mode):
             "label_key": "healthy",
             "label": CLASS_META["healthy"]["label"],
             "confidence": 0.5,
-            "explanation": "暂无可用样本，机器学习判定退化为默认健康状态。",
+            "explanation": "暂无可用样本，机器学习退化为默认健康状态。",
             "top_features": [],
             "probabilities": [],
             "training_sample_count": 0,
@@ -433,7 +499,7 @@ def build_ml_result(feature_vector, crop_mode):
     distance_pairs.sort(key=lambda item: item[1])
     labels = [item[0] for item in distance_pairs]
     scores = softmax(-np.array([item[1] for item in distance_pairs]))
-    best_label, best_distance, best_centroid = distance_pairs[0]
+    best_label, _, best_centroid = distance_pairs[0]
     second_centroid = distance_pairs[1][2] if len(distance_pairs) > 1 else best_centroid
 
     feature_deltas = []
@@ -447,7 +513,7 @@ def build_ml_result(feature_vector, crop_mode):
         {"label_key": label, "label": CLASS_META[label]["label"], "probability": round(float(probability), 4)}
         for label, probability in zip(labels, scores)
     ]
-    explanation = f"基于样本特征相似度，当前图斑与“{CLASS_META[best_label]['label']}”样本最接近。"
+    explanation = f"与训练样本最接近的类别为“{CLASS_META[best_label]['label']}”。"
 
     return {
         "label_key": best_label,
@@ -458,6 +524,153 @@ def build_ml_result(feature_vector, crop_mode):
         "probabilities": probability_list,
         "training_sample_count": len(samples),
     }
+
+def compute_texture_proxy(red, valid_mask):
+    diff_x = np.zeros_like(red, dtype=float)
+    diff_y = np.zeros_like(red, dtype=float)
+    diff_x[:, 1:] = np.abs(red[:, 1:] - red[:, :-1])
+    diff_y[1:, :] = np.abs(red[1:, :] - red[:-1, :])
+    proxy = (diff_x + diff_y) * 0.5
+    proxy[~valid_mask] = np.nan
+    return proxy
+
+
+def classify_pixels(ndvi, ndmi, bsi, texture_proxy, valid_mask, config):
+    finite = valid_mask & np.isfinite(ndvi) & np.isfinite(ndmi) & np.isfinite(bsi)
+    non_agri_mask = finite & (
+        ((ndvi < config["non_agri_ndvi"]) & (bsi >= config["non_agri_bsi"]))
+        | ((bsi >= (config["non_agri_bsi"] + 0.06)) & (ndmi < 0.04))
+    )
+    bare_mask = finite & (ndvi < 0.12) & (bsi >= (config["fallow_bsi"] + 0.06))
+    excluded_mask = non_agri_mask | bare_mask
+
+    effective_mask = finite & (~excluded_mask)
+    if np.sum(effective_mask) == 0:
+        effective_mask = finite & (~non_agri_mask)
+    if np.sum(effective_mask) == 0:
+        effective_mask = finite
+
+    texture_values = texture_proxy[effective_mask & np.isfinite(texture_proxy)]
+    texture_threshold = float(np.nanpercentile(texture_values, 72)) if texture_values.size else 0.0
+
+    fallow_mask = effective_mask & (ndvi <= config["harvest_ndvi"]) & (bsi >= config["fallow_bsi"])
+    harvest_mask = effective_mask & (~fallow_mask) & (ndvi <= config["harvest_ndvi"]) & (ndmi <= config["harvest_ndmi"])
+    lodging_mask = effective_mask & (~fallow_mask) & (~harvest_mask) & (
+        ((ndvi < config["damage_ndvi"]) & (texture_proxy >= texture_threshold))
+    )
+    pest_mask = effective_mask & (~fallow_mask) & (~harvest_mask) & (~lodging_mask) & (
+        (ndvi < config["damage_ndvi"]) | (ndmi < config["pest_ndmi"])
+    )
+    healthy_mask = effective_mask & (~fallow_mask) & (~harvest_mask) & (~lodging_mask) & (~pest_mask)
+    damage_mask = lodging_mask | pest_mask
+
+    label_grid = np.full(ndvi.shape, "invalid", dtype=object)
+    label_grid[non_agri_mask] = "non_agri"
+    label_grid[bare_mask] = "non_agri"
+    label_grid[fallow_mask] = "fallow"
+    label_grid[harvest_mask] = "harvest"
+    label_grid[lodging_mask] = "lodging"
+    label_grid[pest_mask] = "pest"
+    label_grid[healthy_mask] = "healthy"
+
+    return {
+        "non_agri": non_agri_mask,
+        "bare": bare_mask,
+        "excluded": excluded_mask,
+        "effective": effective_mask,
+        "fallow": fallow_mask,
+        "harvest": harvest_mask,
+        "lodging": lodging_mask,
+        "pest": pest_mask,
+        "healthy": healthy_mask,
+        "damage": damage_mask,
+        "label_grid": label_grid,
+    }
+
+
+def build_block_cells(label_grid, effective_mask, rows=16, cols=16):
+    height, width = label_grid.shape
+    cells = []
+    class_counts = {key: 0 for key in PIXEL_CLASS_KEYS}
+    effective_total = int(np.sum(effective_mask))
+
+    if effective_total > 0:
+        for key in PIXEL_CLASS_KEYS:
+            class_counts[key] = int(np.sum((label_grid == key) & effective_mask))
+
+    for row in range(rows):
+        for col in range(cols):
+            r0 = int(np.floor((row * height) / rows))
+            r1 = int(np.floor(((row + 1) * height) / rows))
+            c0 = int(np.floor((col * width) / cols))
+            c1 = int(np.floor(((col + 1) * width) / cols))
+            if r1 <= r0 or c1 <= c0:
+                continue
+
+            block_labels = label_grid[r0:r1, c0:c1]
+            block_effective = effective_mask[r0:r1, c0:c1]
+            block_total = int(block_labels.size)
+            block_effective_count = int(np.sum(block_effective))
+            effective_ratio = float(block_effective_count / block_total) if block_total else 0.0
+
+            if block_effective_count == 0:
+                cells.append({
+                    "row": row,
+                    "col": col,
+                    "label_key": "invalid",
+                    "label": "无效区",
+                    "confidence": 0.0,
+                    "effective_ratio": round(effective_ratio, 4),
+                })
+                continue
+
+            block_counts = {
+                key: int(np.sum((block_labels == key) & block_effective))
+                for key in PIXEL_CLASS_KEYS
+            }
+            dominant_key = max(block_counts.items(), key=lambda item: item[1])[0]
+            dominant_count = block_counts[dominant_key]
+            confidence = float(dominant_count / block_effective_count)
+
+            cells.append({
+                "row": row,
+                "col": col,
+                "label_key": dominant_key,
+                "label": CLASS_META[dominant_key]["label"],
+                "confidence": round(confidence, 4),
+                "effective_ratio": round(effective_ratio, 4),
+            })
+
+    class_summary = []
+    for key, count in class_counts.items():
+        ratio = float(count / effective_total) if effective_total else 0.0
+        class_summary.append({
+            "label_key": key,
+            "label": CLASS_META[key]["label"],
+            "pixel_count": int(count),
+            "ratio": round(ratio, 4),
+        })
+    class_summary.sort(key=lambda item: item["ratio"], reverse=True)
+
+    return cells, class_summary
+
+
+def merge_model_with_block_result(model_result, block_class_summary):
+    merged = dict(model_result)
+    if not block_class_summary:
+        return merged
+
+    dominant = block_class_summary[0]
+    dominant_key = dominant["label_key"]
+    dominant_ratio = float(dominant["ratio"])
+
+    if dominant_ratio >= 0.45 and dominant_key != merged["label_key"]:
+        merged["label_key"] = dominant_key
+        merged["label"] = CLASS_META[dominant_key]["label"]
+        merged["confidence"] = round(max(float(merged["confidence"]), dominant_ratio), 4)
+        merged["explanation"] = f"{merged['explanation']} 小块级分类中“{merged['label']}”占比 {round(dominant_ratio * 100, 1)}%，因此采用块级汇总结果。"
+
+    return merged
 
 
 def assemble_analysis_result(bands, area_mu, engine_type, image_date, crop_mode, model_mode):
@@ -471,7 +684,7 @@ def assemble_analysis_result(bands, area_mu, engine_type, image_date, crop_mode,
 
     valid_mask = np.isfinite(red) & np.isfinite(nir) & ((red != 0) | (nir != 0))
     if not np.any(valid_mask):
-        raise ValueError("计算失败：该图斑内无有效数据")
+        raise ValueError("计算失败：AOI 内无有效像元")
 
     ndvi = safe_index(nir - red, nir + red)
     ndre = safe_index(nir - rededge, nir + rededge)
@@ -479,42 +692,47 @@ def assemble_analysis_result(bands, area_mu, engine_type, image_date, crop_mode,
     ndmi = safe_index(nir - swir, nir + swir)
     bsi = safe_index((swir + red) - (nir + blue), (swir + red) + (nir + blue))
 
-    gray_band = red
-    gray_values = gray_band[valid_mask]
-    gray_min = gray_values.min()
-    gray_max = gray_values.max()
+    gray_values = red[valid_mask]
+    gray_min = float(np.nanmin(gray_values))
+    gray_max = float(np.nanmax(gray_values))
     if gray_max > gray_min:
-        gray_8bit = np.uint8(255 * (gray_band - gray_min) / (gray_max - gray_min))
+        gray_8bit = np.uint8(255 * (red - gray_min) / (gray_max - gray_min))
     else:
-        gray_8bit = np.zeros_like(gray_band, dtype=np.uint8)
+        gray_8bit = np.zeros_like(red, dtype=np.uint8)
 
     contrast, entropy = compute_texture_metrics(gray_8bit, valid_mask)
-
-    damage_mask = valid_mask & np.isfinite(ndvi) & (ndvi < config["damage_ndvi"])
-    harvest_mask = valid_mask & np.isfinite(ndvi) & np.isfinite(ndmi) & (ndvi < config["harvest_ndvi"]) & (ndmi < config["harvest_ndmi"])
-    fallow_mask = valid_mask & np.isfinite(ndvi) & np.isfinite(bsi) & (ndvi < config["harvest_ndvi"]) & (bsi >= config["fallow_bsi"])
-    non_agri_mask = valid_mask & np.isfinite(ndvi) & np.isfinite(bsi) & (ndvi < config["non_agri_ndvi"]) & (bsi >= config["non_agri_bsi"])
+    texture_proxy = compute_texture_proxy(red, valid_mask)
+    masks = classify_pixels(ndvi, ndmi, bsi, texture_proxy, valid_mask, config)
 
     valid_count = int(np.sum(valid_mask))
-    damage_ratio = float(np.sum(damage_mask) / valid_count)
-    harvest_ratio = float(np.sum(harvest_mask) / valid_count)
-    fallow_ratio = float(np.sum(fallow_mask) / valid_count)
-    non_agri_ratio = float(np.sum(non_agri_mask) / valid_count)
+    effective_count = int(np.sum(masks["effective"]))
+    excluded_count = int(np.sum(masks["excluded"]))
+    damage_count = int(np.sum(masks["damage"]))
+    harvest_count = int(np.sum(masks["harvest"]))
+    fallow_count = int(np.sum(masks["fallow"]))
+
+    effective_ratio = float(effective_count / valid_count) if valid_count else 0.0
+    non_agri_ratio = float(excluded_count / valid_count) if valid_count else 0.0
+    damage_ratio = float(damage_count / effective_count) if effective_count else 0.0
+    harvest_ratio = float(harvest_count / effective_count) if effective_count else 0.0
+    fallow_ratio = float(fallow_count / effective_count) if effective_count else 0.0
+
+    feature_mask = masks["effective"] if effective_count else valid_mask
 
     thematic_layers = {
-        "ndvi": summarize_index("ndvi", ndvi[valid_mask]),
-        "ndre": summarize_index("ndre", ndre[valid_mask]),
-        "evi2": summarize_index("evi2", evi2[valid_mask]),
-        "ndmi": summarize_index("ndmi", ndmi[valid_mask]),
-        "bsi": summarize_index("bsi", bsi[valid_mask]),
+        "ndvi": summarize_index("ndvi", ndvi[feature_mask]),
+        "ndre": summarize_index("ndre", ndre[feature_mask]),
+        "evi2": summarize_index("evi2", evi2[feature_mask]),
+        "ndmi": summarize_index("ndmi", ndmi[feature_mask]),
+        "bsi": summarize_index("bsi", bsi[feature_mask]),
     }
 
     feature_vector = {
-        "ndvi": safe_mean(ndvi[valid_mask]),
-        "ndre": safe_mean(ndre[valid_mask]),
-        "evi2": safe_mean(evi2[valid_mask]),
-        "ndmi": safe_mean(ndmi[valid_mask]),
-        "bsi": safe_mean(bsi[valid_mask]),
+        "ndvi": safe_mean(ndvi[feature_mask]),
+        "ndre": safe_mean(ndre[feature_mask]),
+        "evi2": safe_mean(evi2[feature_mask]),
+        "ndmi": safe_mean(ndmi[feature_mask]),
+        "bsi": safe_mean(bsi[feature_mask]),
         "contrast": contrast,
         "entropy": entropy,
         "damage_ratio": damage_ratio,
@@ -522,30 +740,53 @@ def assemble_analysis_result(bands, area_mu, engine_type, image_date, crop_mode,
 
     rule_result = build_rule_result(feature_vector, crop_mode)
     ml_result = build_ml_result(feature_vector, crop_mode)
-    final_result = ml_result if model_mode == "ml" else rule_result
+    base_result = ml_result if model_mode == "ml" else rule_result
+
+    block_cells, block_class_summary = build_block_cells(
+        label_grid=masks["label_grid"],
+        effective_mask=masks["effective"],
+        rows=16,
+        cols=16,
+    )
+    final_result = merge_model_with_block_result(base_result, block_class_summary)
     final_meta = CLASS_META[final_result["label_key"]]
 
+    effective_area_mu = round(area_mu * effective_ratio, 2)
+    filtered_non_agri_area_mu = round(area_mu * non_agri_ratio, 2)
+
     if final_meta["is_disaster"]:
-        recognized_area_mu = round(area_mu * damage_ratio, 2)
+        recognized_area_mu = round(effective_area_mu * damage_ratio, 2)
     elif final_result["label_key"] == "harvest":
-        recognized_area_mu = round(area_mu * harvest_ratio, 2)
+        recognized_area_mu = round(effective_area_mu * harvest_ratio, 2)
     elif final_result["label_key"] == "fallow":
-        recognized_area_mu = round(area_mu * fallow_ratio, 2)
+        recognized_area_mu = round(effective_area_mu * fallow_ratio, 2)
     elif final_result["label_key"] == "non_agri":
-        recognized_area_mu = round(area_mu * max(non_agri_ratio, 0.15), 2)
+        recognized_area_mu = filtered_non_agri_area_mu
     else:
         recognized_area_mu = 0.0
 
+    pixel_class_ratios = {
+        "healthy": round(float(np.sum(masks["healthy"]) / max(effective_count, 1)), 4),
+        "pest": round(float(np.sum(masks["pest"]) / max(effective_count, 1)), 4),
+        "lodging": round(float(np.sum(masks["lodging"]) / max(effective_count, 1)), 4),
+        "harvest": round(float(np.sum(masks["harvest"]) / max(effective_count, 1)), 4),
+        "fallow": round(float(np.sum(masks["fallow"]) / max(effective_count, 1)), 4),
+        "non_agri": round(non_agri_ratio, 4),
+    }
+
     return {
         "status": "success",
+        "analysis_pipeline": "non-agri filter + pixel classification + block aggregation",
         "engine_type": engine_type,
         "image_date": image_date,
         "crop_mode": crop_mode,
         "crop_mode_label": config["label"],
         "model_mode": model_mode,
         "total_area_mu": round(area_mu, 2),
+        "effective_area_mu": effective_area_mu,
+        "filtered_non_agri_area_mu": filtered_non_agri_area_mu,
         "recognized_area_mu": recognized_area_mu,
-        "damaged_area_mu": round(area_mu * damage_ratio, 2),
+        "damaged_area_mu": round(effective_area_mu * damage_ratio, 2),
         "damage_ratio_float": round(damage_ratio, 6),
         "damage_ratio": f"{round(damage_ratio * 100, 1)}%",
         "thematic_layers": thematic_layers,
@@ -560,6 +801,10 @@ def assemble_analysis_result(bands, area_mu, engine_type, image_date, crop_mode,
             "fallow": round(fallow_ratio, 4),
             "non_agri": round(non_agri_ratio, 4),
         },
+        "pixel_class_ratios": pixel_class_ratios,
+        "block_grid": {"rows": 16, "cols": 16},
+        "block_cells": block_cells,
+        "block_class_summary": block_class_summary,
         "rule_result": rule_result,
         "ml_result": ml_result,
         "final_result": {
@@ -572,20 +817,19 @@ def assemble_analysis_result(bands, area_mu, engine_type, image_date, crop_mode,
         },
         "spectral_data": {
             "healthy": [
-                round(safe_mean(blue[valid_mask & ~damage_mask]), 4),
-                round(safe_mean(green[valid_mask & ~damage_mask]), 4),
-                round(safe_mean(red[valid_mask & ~damage_mask]), 4),
-                round(safe_mean(nir[valid_mask & ~damage_mask]), 4),
+                round(safe_mean(blue[masks["healthy"]]), 4),
+                round(safe_mean(green[masks["healthy"]]), 4),
+                round(safe_mean(red[masks["healthy"]]), 4),
+                round(safe_mean(nir[masks["healthy"]]), 4),
             ],
             "damaged": [
-                round(safe_mean(blue[damage_mask]), 4),
-                round(safe_mean(green[damage_mask]), 4),
-                round(safe_mean(red[damage_mask]), 4),
-                round(safe_mean(nir[damage_mask]), 4),
+                round(safe_mean(blue[masks["damage"]]), 4),
+                round(safe_mean(green[masks["damage"]]), 4),
+                round(safe_mean(red[masks["damage"]]), 4),
+                round(safe_mean(nir[masks["damage"]]), 4),
             ],
         },
     }
-
 
 @app.get("/api/health")
 def health():
@@ -666,7 +910,7 @@ def analyze_damage():
         if payload["has_file"]:
             file = request.files["file"]
             engine_type = "用户提供: 无人机高分影像"
-            image_date = "用户实时上传 (无人机本地数据)"
+            image_date = "用户实时上传"
             with MemoryFile(file.read()) as memfile:
                 with memfile.open() as dataset:
                     tiff_crs = dataset.crs
@@ -674,11 +918,8 @@ def analyze_damage():
                     out_image, _ = mask(dataset, [reprojected_poly], crop=True)
                     bands = extract_drone_bands(dataset, out_image)
         else:
-            engine_type = "云端直连: Sentinel-2 真实多光谱"
-            try:
-                bands, image_date = fetch_stac_bands(geojson_poly)
-            except Exception as exc:
-                return jsonify({"error": "该区域近期无可用卫星数据，请上传无人机影像。", "details": str(exc)}), 404
+            engine_type = "云端直连: Sentinel-2"
+            bands, image_date = fetch_stac_bands(geojson_poly)
 
         result = assemble_analysis_result(
             bands=bands,
@@ -698,3 +939,4 @@ def analyze_damage():
 if __name__ == "__main__":
     ensure_data_files()
     app.run(host="0.0.0.0", port=5000)
+
