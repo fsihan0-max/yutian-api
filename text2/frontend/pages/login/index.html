@@ -1,0 +1,57 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鍐滈櫓鐞嗚禂绯荤粺 - 鐧诲綍</title>
+    <link rel="stylesheet" href="../../assets/css/style.css">
+</head>
+<body class="auth-body">
+    <div class="auth-shell">
+        <section class="auth-panel">
+            <header class="auth-header">
+                <h1>鍐滈櫓鐞嗚禂绯荤粺</h1>
+                <p>璇疯緭鍏ヨ处鍙蜂俊鎭悗杩涘叆绯荤粺銆?/p>
+            </header>
+
+            <div class="auth-tabs">
+                <button id="tabLogin" class="auth-tab active" type="button">鐧诲綍</button>
+                <button id="tabRegister" class="auth-tab" type="button">娉ㄥ唽</button>
+            </div>
+
+            <form id="loginForm" class="auth-form">
+                <label>璐﹀彿</label>
+                <input id="loginUsername" type="text" autocomplete="username" required>
+                <label>瀵嗙爜</label>
+                <input id="loginPassword" type="password" autocomplete="current-password" required>
+                <button class="btn btn-primary" type="submit">鐧诲綍绯荤粺</button>
+            </form>
+
+            <form id="registerForm" class="auth-form hidden">
+                <label>璐﹀彿</label>
+                <input id="registerUsername" type="text" autocomplete="username" required>
+                <label>瀵嗙爜</label>
+                <input id="registerPassword" type="password" autocomplete="new-password" required>
+                <label>纭瀵嗙爜</label>
+                <input id="registerPasswordConfirm" type="password" autocomplete="new-password" required>
+                <label>瑙掕壊</label>
+                <select id="registerRole">
+                    <option value="surveyor">鏌ュ嫎鍛?/option>
+                    <option value="reviewer">澶嶆牳鍛?/option>
+                </select>
+                <button class="btn btn-primary" type="submit">娉ㄥ唽璐﹀彿</button>
+            </form>
+
+            <p class="form-message" id="authMessage"></p>
+
+            <footer class="auth-footer">
+                <p>榛樿璐﹀彿锛歚surveyor01` / `reviewer01` / `admin01`锛屽瘑鐮佸潎涓?`123456`銆?/p>
+            </footer>
+        </section>
+    </div>
+
+    <script src="../../js/modules/auth/auth.js"></script>
+    <script src="../../js/modules/auth/loginPage.js"></script>
+</body>
+</html>
+

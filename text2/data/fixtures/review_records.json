@@ -1,0 +1,102 @@
+[
+  {
+    "id": "876c1ff5d5",
+    "case_id": "YT-20260316-001",
+    "reviewer": "7777",
+    "corrected_label": "病虫害",
+    "corrected_area_mu": "",
+    "comment": "",
+    "requires_resurvey": false,
+    "created_at": "2026-03-16T16:16:16Z"
+  },
+  {
+    "id": "f09fcadb4a",
+    "case_id": "YT-20260316-001",
+    "reviewer": "查勘员01",
+    "corrected_label": "病虫害",
+    "corrected_area_mu": "",
+    "comment": "",
+    "requires_resurvey": false,
+    "created_at": "2026-03-17T06:43:04Z"
+  },
+  {
+    "id": "1eca9b33ad",
+    "case_id": "YT-20260316-001",
+    "reviewer": "复核员01",
+    "corrected_label": "病虫害",
+    "corrected_area_mu": "",
+    "comment": "",
+    "requires_resurvey": false,
+    "created_at": "2026-03-17T06:48:51Z"
+  },
+  {
+    "id": "4625d71ebf",
+    "case_id": "YT-20260316-001",
+    "reviewer": "复核员01",
+    "corrected_label": "病虫害",
+    "corrected_area_mu": "",
+    "comment": "",
+    "requires_resurvey": false,
+    "created_at": "2026-03-17T06:49:08Z"
+  },
+  {
+    "id": "3c87fdd9bd",
+    "case_id": "YT-20260316-001",
+    "reviewer": "复核员01",
+    "corrected_label": "病虫害",
+    "corrected_area_mu": "",
+    "comment": "",
+    "requires_resurvey": false,
+    "created_at": "2026-03-17T10:00:42Z"
+  },
+  {
+    "id": "70a0efe1e3",
+    "case_id": "YT-20260316-001",
+    "reviewer": "复核员01",
+    "corrected_label": "病虫害",
+    "corrected_area_mu": "",
+    "comment": "",
+    "requires_resurvey": false,
+    "created_at": "2026-03-17T10:00:47Z"
+  },
+  {
+    "id": "98de0538df",
+    "case_id": "YT-20260316-002",
+    "reviewer": "复核员01",
+    "corrected_label": "病虫害",
+    "corrected_area_mu": "",
+    "comment": "",
+    "requires_resurvey": false,
+    "created_at": "2026-03-17T10:01:01Z"
+  },
+  {
+    "id": "fde6661218",
+    "case_id": "YT-20260316-003",
+    "reviewer": "复核员01",
+    "corrected_label": "病虫害",
+    "corrected_area_mu": "",
+    "comment": "",
+    "requires_resurvey": false,
+    "created_at": "2026-03-17T10:01:12Z"
+  },
+  {
+    "id": "a2da9f591e",
+    "case_id": "YT-20260316-002",
+    "reviewer": "qa-reviewer",
+    "corrected_label": "正常长势",
+    "corrected_area_mu": 0.0,
+    "comment": "integration chain check",
+    "requires_resurvey": false,
+    "created_at": "2026-03-17T16:01:49Z"
+  },
+  {
+    "id": "4e4866f603",
+    "case_id": "YT-20260316-001",
+    "reviewer": "复核员01",
+    "corrected_label": "物理倒伏",
+    "corrected_area_mu": "13.2",
+    "comment": "chain-check-1773763653",
+    "requires_resurvey": false,
+    "created_at": "2026-03-17T16:07:38Z"
+  }
+]

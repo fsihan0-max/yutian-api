@@ -1,0 +1,5 @@
+::ffff:127.0.0.1 - - [18/Mar/2026 14:17:14] "GET / HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [18/Mar/2026 14:17:14] "GET /pages/workbench/index.html HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [18/Mar/2026 14:19:56] "GET /js/modules/auth/auth.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [18/Mar/2026 14:19:56] "GET /pages/login/index.html HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [18/Mar/2026 14:19:56] "GET /js/modules/bootstrap.js HTTP/1.1" 200 -

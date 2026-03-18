@@ -1,0 +1,307 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鍐滈櫓鐞嗚禂绯荤粺</title>
+    <link rel="stylesheet" href="../../assets/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
+    <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/light/main.css">
+    <script src="https://js.arcgis.com/4.28/"></script>
+</head>
+<body class="admin-body">
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="brand-block">
+                <strong>鍐滈櫓鐞嗚禂绯荤粺</strong>
+                <span id="roleLabel"></span>
+            </div>
+
+            <div class="user-block">
+                <p id="currentUserName"></p>
+                <small id="currentRoleName"></small>
+            </div>
+
+            <nav id="menuList" class="menu-list"></nav>
+
+            <button id="logoutBtn" type="button" class="btn btn-danger">閫€鍑虹櫥褰?/button>
+        </aside>
+
+        <div class="main-shell">
+            <header class="topbar">
+                <h1 id="pageTitle">宸ヤ綔鍙?/h1>
+                <div class="topbar-right">
+                    <span class="badge" id="healthBadge">鏈嶅姟妫€娴嬩腑</span>
+                    <span class="badge" id="dateBadge"></span>
+                </div>
+            </header>
+
+            <main class="content">
+                <section class="page active" data-page="workbench">
+                    <div class="metrics-grid" id="workbenchMetrics"></div>
+                    <div class="two-col">
+                        <article class="panel">
+                            <div class="panel-title" id="workbenchTodoTitle">鎴戠殑寰呭姙</div>
+                            <div id="todoList" class="item-list"></div>
+                        </article>
+                        <article class="panel">
+                            <div class="panel-title">寮傚父棰勮</div>
+                            <div id="warningList" class="item-list"></div>
+                        </article>
+                    </div>
+                    <div class="two-col">
+                        <article class="panel">
+                            <div class="panel-title" id="workbenchRecentTitle">鏈€杩戝鐞嗘浠?/div>
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>妗堜欢鍙?/th>
+                                        <th>涔￠晣</th>
+                                        <th>浣滅墿</th>
+                                        <th>鐘舵€?/th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recentCaseRows"></tbody>
+                            </table>
+                        </article>
+                        <article class="panel">
+                            <div class="panel-title">蹇嵎鍏ュ彛</div>
+                            <div id="quickActions" class="quick-grid"></div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="page" data-page="survey">
+                    <div class="subtabs">
+                        <button class="subtab active" data-survey-tab="damage" type="button">鏅鸿兘瀹氭崯</button>
+                        <button class="subtab" data-survey-tab="history" type="button">鍘嗗彶瀵规瘮</button>
+                        <button class="subtab" data-survey-tab="sample" type="button">鏍锋湰鏍囨敞</button>
+                        <button class="subtab" data-survey-tab="field" type="button">澶栦笟鍙栬瘉</button>
+                    </div>
+
+                    <div class="subpage active" data-subpage="damage">
+                        <div class="survey-layout">
+                            <article class="panel">
+                                <div class="form-row">
+                                    <input id="searchInput" type="text" placeholder="杈撳叆涔￠晣鎴栧湴鍧€">
+                                    <button class="btn" id="btnSearch" type="button">瀹氫綅</button>
+                                </div>
+                                <div class="form-row">
+                                    <select id="cropModeSelect">
+                                        <option value="wheat">灏忛害</option>
+                                        <option value="corn">鐜夌背</option>
+                                    </select>
+                                    <select id="modelModeSelect">
+                                        <option value="rule">瑙勫垯鍒ゅ畾</option>
+                                        <option value="ml">鏈哄櫒瀛︿範鍒ゅ畾</option>
+                                    </select>
+                                </div>
+                                <div class="form-row wrap">
+                                    <button class="btn btn-small active" data-theme-key="ndvi" type="button">NDVI</button>
+                                    <button class="btn btn-small" data-theme-key="ndre" type="button">NDRE</button>
+                                    <button class="btn btn-small" data-theme-key="evi2" type="button">EVI2</button>
+                                    <button class="btn btn-small" data-theme-key="ndmi" type="button">NDMI</button>
+                                    <button class="btn btn-small" data-theme-key="bsi" type="button">BSI</button>
+                                </div>
+                                <div class="form-row">
+                                    <input id="droneUploadInput" type="file" accept=".tif,.tiff">
+                                    <button class="btn btn-primary" id="btnAnalyze" type="button" disabled>寮€濮嬪垎鏋?/button>
+                                </div>
+                                <div class="result-block" id="analyzeResult"></div>
+                            </article>
+                            <article class="panel map-panel">
+                                <div class="map-panel-header">
+                                    <div class="panel-title">鍦板浘涓?AOI</div>
+                                    <div class="map-basemap-toggle">
+                                        <button class="btn btn-small active" id="baseMapVecBtn" type="button">澶╁湴鍥剧煝閲?/button>
+                                        <button class="btn btn-small" id="baseMapImgBtn" type="button">澶╁湴鍥惧崼鏄?/button>
+                                    </div>
+                                </div>
+                                <div id="viewDiv"></div>
+                            </article>
+                        </div>
+                    </div>
+
+                    <div class="subpage" data-subpage="history">
+                        <article class="panel">
+                            <div class="panel-title">鍘嗗彶瀵规瘮</div>
+                            <div class="item-list" id="historyList"></div>
+                        </article>
+                    </div>
+
+                    <div class="subpage" data-subpage="sample">
+                        <div class="two-col">
+                            <article class="panel">
+                                <div class="panel-title">鏍囨敞鎿嶄綔</div>
+                                <div class="form-row wrap">
+                                    <button class="btn" data-sample-label="pest" type="button">鏍囨敞鐥呰櫕瀹?/button>
+                                    <button class="btn" data-sample-label="lodging" type="button">鏍囨敞鍊掍紡</button>
+                                    <button class="btn" data-sample-label="harvest" type="button">鏍囨敞鏀跺壊</button>
+                                    <button class="btn" data-sample-label="fallow" type="button">鏍囨敞浼戣€?/button>
+                                </div>
+                                <input id="sampleNoteInput" type="text" placeholder="鏍囨敞澶囨敞">
+                                <div class="panel-title minor-title">鍚屽湴鍧楃壒寰?/div>
+                                <div class="item-list" id="featureList"></div>
+                            </article>
+                            <article class="panel">
+                                <div class="panel-title">鏍锋湰璁板綍</div>
+                                <div class="item-list" id="sampleList"></div>
+                            </article>
+                        </div>
+                    </div>
+
+                    <div class="subpage" data-subpage="field">
+                        <div class="two-col">
+                            <article class="panel">
+                                <div class="panel-title">澶栦笟鍙栬瘉</div>
+                                <input id="fieldPhotoInput" type="file" multiple accept="image/*">
+                                <input id="fieldNoteInput" type="text" placeholder="璇佹嵁璇存槑">
+                                <button class="btn" id="addFieldEvidenceBtn" type="button">鍔犲叆璇佹嵁娓呭崟</button>
+                                <div class="item-list" id="fieldEvidenceList"></div>
+                            </article>
+                            <article class="panel">
+                                <div class="panel-title">娴佺▼妫€鏌?/div>
+                                <div class="item-list" id="fieldChecklist"></div>
+                            </article>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="page" data-page="cases">
+                    <article class="panel">
+                        <div class="panel-title">妗堜欢鍒楄〃</div>
+                        <div class="form-row wrap">
+                            <select id="caseFilterTown"></select>
+                            <select id="caseFilterStatus"></select>
+                            <select id="caseFilterCrop"></select>
+                        </div>
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>妗堜欢鍙?/th>
+                                    <th>涔￠晣/鏉?/th>
+                                    <th>浣滅墿</th>
+                                    <th>鏌ュ嫎鍛?/th>
+                                    <th>鐘舵€?/th>
+                                </tr>
+                            </thead>
+                            <tbody id="caseRows"></tbody>
+                        </table>
+                    </article>
+                    <div class="two-col">
+                        <article class="panel">
+                            <div class="panel-title">妗堜欢璇︽儏</div>
+                            <div id="caseDetail" class="item-list"></div>
+                        </article>
+                        <article class="panel" id="reviewPanel">
+                            <div class="panel-title">缁撴灉澶嶆牳</div>
+                            <div class="list-item hidden" id="reviewReadonlyHint">
+                                <strong>褰撳墠瑙掕壊鏃犲鏍告潈闄?/strong>
+                                <p>鏌ュ嫎鍛樹粎鍙煡鐪嬫浠惰鎯咃紝涓嶈兘鎻愪氦澶嶆牳銆?/p>
+                            </div>
+                            <div id="reviewActionPanel">
+                                <select id="reviewLabelSelect">
+                                    <option value="鐥呰櫕瀹?>鐥呰櫕瀹?/option>
+                                    <option value="鐗╃悊鍊掍紡">鐗╃悊鍊掍紡</option>
+                                    <option value="姝ｅ父鏀跺壊">姝ｅ父鏀跺壊</option>
+                                    <option value="浼戣€?>浼戣€?/option>
+                                    <option value="闈炲啘鍦扮墿">闈炲啘鍦扮墿</option>
+                                </select>
+                                <input id="reviewAreaInput" type="number" step="0.1" placeholder="澶嶆牳闈㈢Н(浜?">
+                                <textarea id="reviewCommentInput" placeholder="澶嶆牳璇存槑"></textarea>
+                                <button class="btn btn-primary" id="submitReviewBtn" type="button">鎻愪氦澶嶆牳</button>
+                            </div>
+                            <div class="item-list" id="disputeList"></div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="page" data-page="reports">
+                    <div class="two-col">
+                        <article class="panel">
+                            <div class="panel-title">鎶ュ憡鐢熸垚</div>
+                            <div class="form-row wrap">
+                                <button class="btn btn-primary" id="generateFarmerReportBtn" type="button">鐢熸垚鍐滄埛鎶ュ憡</button>
+                                <button class="btn btn-primary" id="generateArchiveReportBtn" type="button">鐢熸垚褰掓。鎶ュ憡</button>
+                                <button class="btn" id="exportPdfBtn" type="button">瀵煎嚭 PDF</button>
+                            </div>
+                            <div class="item-list" id="reportLogList"></div>
+                        </article>
+                        <article class="panel">
+                            <div class="panel-title">璇佹嵁娓呭崟</div>
+                            <div class="item-list" id="evidenceList"></div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="page" data-page="risk">
+                    <div class="metrics-grid" id="riskMetrics"></div>
+                    <div class="two-col">
+                        <article class="panel">
+                            <div class="panel-title">鍙楃伨闈㈢Н鎺掕</div>
+                            <div class="chart-holder"><canvas id="riskAreaChart"></canvas></div>
+                        </article>
+                        <article class="panel">
+                            <div class="panel-title">椋庨櫓绫诲瀷鍗犳瘮</div>
+                            <div class="chart-holder"><canvas id="riskTypeChart"></canvas></div>
+                        </article>
+                    </div>
+                    <div class="two-col">
+                        <article class="panel">
+                            <div class="panel-title">鍖哄煙鎬佸娍</div>
+                            <div class="item-list" id="regionTrendList"></div>
+                        </article>
+                        <article class="panel">
+                            <div class="panel-title">璧勬簮璋冨害</div>
+                            <div class="item-list" id="dispatchList"></div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="page" data-page="data">
+                    <div class="two-col">
+                        <article class="panel">
+                            <div class="panel-title">褰卞儚涓庡浘灞?/div>
+                            <div class="item-list" id="imageryList"></div>
+                        </article>
+                        <article class="panel">
+                            <div class="panel-title">鏍锋湰涓庢ā鍨?/div>
+                            <div class="item-list" id="modelList"></div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="page" data-page="settings">
+                    <div class="two-col">
+                        <article class="panel">
+                            <div class="panel-title">鐢ㄦ埛淇℃伅</div>
+                            <div class="item-list" id="profileList"></div>
+                        </article>
+                        <article class="panel">
+                            <div class="panel-title">鍙傛暟璁剧疆</div>
+                            <div class="item-list" id="settingList"></div>
+                        </article>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <div class="modal hidden" id="reportModal" role="dialog" aria-modal="true" aria-labelledby="reportModalTitle">
+        <div class="modal-mask" id="closeReportModalMask"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="reportModalTitle">鎶ュ憡棰勮</h2>
+                <button class="btn btn-small" id="closeReportModalBtn" type="button">鍏抽棴</button>
+            </div>
+            <div class="modal-body" id="reportPreviewContent"></div>
+        </div>
+    </div>
+
+    <script src="../../js/modules/auth/auth.js"></script>
+    <script src="../../js/config/appConfig.js"></script>
+    <script type="module" src="../../js/modules/bootstrap.js"></script>
+</body>
+</html>
+
